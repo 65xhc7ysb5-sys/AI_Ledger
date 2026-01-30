@@ -1,16 +1,16 @@
 import streamlit as st
 import pandas as pd
+from database import load_data, delete_expense
 
 st.set_page_config(page_title="가계부 대시보드", page_icon="📊", layout="wide")
 st.title("📊 소비 분석 대시보드")
 
-# 데이터 확인
-if 'ledger' not in st.session_state or not st.session_state.ledger:
-    st.info("아직 데이터가 없습니다. 'Home' 탭에서 내역을 입력해주세요.")
-    st.stop()
+# [데이터 로드 방식 변경]
+df = load_data()
 
-# 데이터프레임 변환
-df = pd.DataFrame(st.session_state.ledger)
+if df.empty:
+    st.info("아직 저장된 데이터가 없습니다.")
+    st.stop()
 
 # [중요] 날짜 변환 (문자열 -> 날짜객체)
 try:
@@ -47,26 +47,13 @@ with tab2:
 st.divider()
 
 # 3. 상세 내역 관리 (삭제/수정)
-st.subheader("📋 상세 내역 리스트")
+st.subheader("📋 상세 내역")
 
-# 최신순 정렬
-df_display = df.sort_values(by='date', ascending=False).reset_index(drop=True)
-
-# 데이터 에디터 (여기서 수정하면 반영되도록 설정)
-edited_df = st.data_editor(
-    df_display,
-    column_config={
-        "amount": st.column_config.NumberColumn("금액", format="%d원"),
-        "date": st.column_config.DateColumn("날짜", format="YYYY-MM-DD"),
-    },
-    num_rows="dynamic", # 행 추가/삭제 허용
-    use_container_width=True,
-    key="editor"
-)
-
-# 수정된 내용이 있으면 세션에 저장 (JSON 호환 위해 날짜를 다시 문자로 변환)
-if len(edited_df) != len(df) or not edited_df.equals(df_display):
-    # 날짜 객체를 다시 문자열("YYYY-MM-DD")로 변환하여 저장
-    edited_df['date'] = edited_df['date'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else "")
-    st.session_state.ledger = edited_df.to_dict('records')
-    st.rerun()
+# [삭제 기능 추가 팁]
+# SQLite는 각 행마다 고유 ID가 있어서 삭제가 쉽습니다.
+for index, row in df.iterrows():
+    col1, col2 = st.columns([4, 1])
+    col1.write(f"{row['date'].date()} | {row['item']} | {row['amount']:,}원")
+    if col2.button("삭제", key=row['id']):
+        delete_expense(row['id'])
+        st.rerun()
