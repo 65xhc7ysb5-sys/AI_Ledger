@@ -4,6 +4,8 @@ import os
 from PIL import Image
 import json
 from database import init_db, insert_expense
+from dateutil.relativedelta import relativedelta
+from datetime import datetime
 
 # --- 1. 설정 및 초기화 ---
 st.set_page_config(page_title="AI 가계부 - 입력", page_icon="📝")
@@ -56,9 +58,22 @@ with st.form("expense_form", clear_on_submit=False):
             user_content = Image.open(uploaded_file)
             content_type = 'image'
             st.image(user_content, caption="업로드된 이미지", width=300)
+
+    # Divider 추가
+    st.divider()
     
-    # [핵심 수정] 일반 button 대신 form_submit_button 사용
-    submitted = st.form_submit_button("기록하기 🚀", use_container_width=True)
+    # Divider 추가 후 할부 선택 및 기록하기 버튼 배치
+    col_installment, col_submit = st.columns([1, 2])
+    
+    with col_installment:
+        installment_months = st.selectbox("할부(개월)", options=[1] + list(range(2, 25)))
+    
+    with col_submit:
+        # 버튼 높이를 맞추기 위한 여백 (선택사항)
+        st.write("") 
+        st.write("")
+        submitted = st.form_submit_button("기록하기 🚀", use_container_width=True)
+
 
 # --- 3. 실행 로직 (버튼 클릭 시에만 실행) ---
 if submitted:
@@ -115,9 +130,42 @@ if submitted:
                 
                 status.write(f"✅ 데이터 추출 성공: {len(new_entries)}건")
                 
+                # --- [여기부터 할부 로직 추가] ---
+                final_entries = []
+                
+                if installment_months > 1:
+                    status.write(f"➗ {installment_months}개월 할부 적용 중...")
+                    for entry in new_entries:
+                        total_amount = entry['amount']
+                        base_date_str = entry['date']
+                        
+                        # 문자열 날짜를 datetime 객체로 변환
+                        try:
+                            base_date = datetime.strptime(base_date_str, "%Y-%m-%d")
+                        except:
+                            base_date = datetime.now()
+
+                        # 월별 금액 계산 (원 단위 절삭을 위해 정수 나눗셈)
+                        monthly_amount = total_amount // installment_months
+                        
+                        for i in range(installment_months):
+                            # 한 달씩 더하기
+                            next_date = base_date + relativedelta(months=i)
+                            
+                            installment_entry = entry.copy()
+                            installment_entry['date'] = next_date.strftime("%Y-%m-%d")
+                            installment_entry['amount'] = monthly_amount
+                            installment_entry['item'] = f"{entry['item']} ({i+1}/{installment_months})"
+                            
+                            final_entries.append(installment_entry)
+                else:
+                    # 일시불이면 그대로 사용
+                    final_entries = new_entries
+
+
                 # 4단계: DB 저장
                 status.write("💾 4단계: 내 컴퓨터(SQLite)에 저장 중...")
-                if insert_expense(new_entries):
+                if insert_expense(final_entries):
                     status.update(label="🎉 모든 작업이 완료되었습니다!", state="complete", expanded=False)
                     st.success(f"✅ 저장 성공! ({new_entries[0]['item']} - {new_entries[0]['amount']:,}원)")
                     
