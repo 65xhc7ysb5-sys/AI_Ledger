@@ -10,7 +10,6 @@ def get_connection():
     return conn
 
 def init_db():
-    """테이블이 없으면 새로 생성"""
     conn = get_connection()
     c = conn.cursor()
     c.execute('''
@@ -27,7 +26,6 @@ def init_db():
     conn.close()
 
 def insert_expense(data_list):
-    """데이터 저장 (성공/실패 메시지 강화)"""
     conn = get_connection()
     c = conn.cursor()
     try:
@@ -39,7 +37,7 @@ def insert_expense(data_list):
         conn.commit()
         return True
     except Exception as e:
-        st.error(f"❌ DB 저장 중 오류 발생: {e}") # 에러 메시지 화면 출력
+        st.error(f"❌ DB 저장 중 오류 발생: {e}")
         return False
     finally:
         conn.close()
@@ -55,14 +53,34 @@ def load_data():
         conn.close()
 
 def delete_expense(expense_id):
-    """데이터 삭제"""
     conn = get_connection()
     c = conn.cursor()
     try:
-        # [수정 포인트] id를 반드시 정수(int)로 변환해야 삭제가 작동함
         c.execute("DELETE FROM expenses WHERE id = ?", (int(expense_id),))
         conn.commit()
     except Exception as e:
         st.error(f"❌ 삭제 중 오류 발생: {e}")
+    finally:
+        conn.close()
+
+# [✨ 새로 추가된 함수] 데이터 수정
+def update_expense(expense_id, column, new_value):
+    """
+    expense_id: 수정할 데이터의 ID
+    column: 수정할 컬럼명 (예: 'amount', 'item', 'category')
+    new_value: 새로운 값
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        # 동적 쿼리 사용 (컬럼명은 매개변수로 바인딩되지 않으므로 f-string 사용)
+        # 보안: column 변수는 코드 내부에서만 제어하므로 SQL Injection 위험 낮음
+        query = f"UPDATE expenses SET {column} = ? WHERE id = ?"
+        c.execute(query, (new_value, int(expense_id)))
+        conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"❌ 수정 중 오류 발생: {e}")
+        return False
     finally:
         conn.close()
