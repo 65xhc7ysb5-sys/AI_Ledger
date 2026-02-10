@@ -1,8 +1,12 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
+import os
 
-DB_NAME = "ledger.db"
+# [핵심 수정] 현재 파일(database.py)의 위치를 기준으로 절대 경로 설정
+# 이렇게 해야 home.py에서 실행하든 pages/dashboard.py에서 실행하든 같은 DB를 봅니다.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, "ledger.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_NAME)
@@ -11,7 +15,7 @@ def get_connection():
 def init_db():
     conn = get_connection()
     c = conn.cursor()
-    # 1. 일반 지출 테이블
+    # 1. 일반 지출
     c.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +27,7 @@ def init_db():
         )
     ''')
     
-    # 2. 고정 지출 테이블
+    # 2. 고정 지출
     c.execute('''
         CREATE TABLE IF NOT EXISTS fixed_expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,8 +39,7 @@ def init_db():
         )
     ''')
     
-    # 3. [신규] 예산 테이블 (카테고리별 목표 금액)
-    # 카테고리는 중복되지 않게 PRIMARY KEY로 설정
+    # 3. 예산
     c.execute('''
         CREATE TABLE IF NOT EXISTS budgets (
             category TEXT PRIMARY KEY,
@@ -153,12 +156,11 @@ def delete_fixed_expense(fixed_id):
     finally:
         conn.close()
 
-# --- [신규] 예산 관련 함수 ---
+# --- 예산 관련 함수 ---
 def save_budget(category, amount):
     conn = get_connection()
     c = conn.cursor()
     try:
-        # 이미 있으면 업데이트, 없으면 삽입 (INSERT OR REPLACE)
         c.execute('''
             INSERT OR REPLACE INTO budgets (category, amount)
             VALUES (?, ?)
