@@ -180,3 +180,14 @@ def get_budgets():
         return pd.DataFrame()
     finally:
         conn.close()
+
+def delete_budget(category):
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM budgets WHERE category = ?", (category,))
+        conn.commit()
+    except Exception as e:
+        st.error(f"예산 삭제 실패: {e}")
+    finally:
+        conn.close()

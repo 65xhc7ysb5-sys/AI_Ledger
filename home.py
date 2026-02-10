@@ -3,20 +3,21 @@ from google import genai
 import os
 from PIL import Image
 import json
-from database import init_db, insert_expense
-from dateutil.relativedelta import relativedelta
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
+# [수정] 데이터를 조회하기 위해 load_data, get_budgets 추가
+from database import init_db, insert_expense, load_data, get_budgets 
 
 # --- 1. 설정 및 초기화 ---
-st.set_page_config(page_title="AI 가계부 - 입력", page_icon="📝")
+st.set_page_config(page_title="AI 가계부 - 홈", page_icon="🏠")
 
 # 앱 시작 시 DB 초기화
 try:
     init_db()
 except Exception as e:
-    st.error(f"초기화 오류: 데이터베이스를 연결할 수 없습니다. {e}")
+    st.error(f"초기화 오류: {e}")
 
-# API 키 및 클라이언트 설정
+# API 키 설정 (기존과 동일)
 try:
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
@@ -24,7 +25,7 @@ try:
         api_key = os.getenv("GEMINI_API_KEY")
     
     if not api_key:
-        st.error("⚠️ API 키가 없습니다. .streamlit/secrets.toml 파일을 확인해주세요.")
+        st.error("⚠️ API 키가 없습니다.")
         st.stop()
         
     client = genai.Client(api_key=api_key)
@@ -34,76 +35,101 @@ except Exception as e:
 
 default_model_name = 'gemini-2.5-flash'
 
-# --- 2. UI 구성 ---
-st.title("📝 가계부 입력")
-st.caption("내용을 입력하고 기록하기 버튼을 눌러주세요.")
+# --- 2. [신규] 상단 요약 대시보드 (HUD) ---
+st.title("🏠 나의 자산 현황")
 
-CATEGORIES = ["외식", "식자재", "교통비", "생활비", "육아", "쇼핑", "주거", "의료", "공과금", "기타"]
+# 날짜 기준
+today = datetime.now()
+current_month_str = today.strftime("%Y-%m")
+today_str = today.strftime("%Y-%m-%d")
 
-# 입력 방식 선택 (폼 바깥에 둬야 선택 시 즉시 화면이 바뀝니다)
-input_type = st.radio("입력 방식", ["텍스트", "이미지 캡처"], horizontal=True)
+# 데이터 가져오기
+month_df = load_data(current_month_str)
+budget_df = get_budgets()
 
-# [핵심 수정] st.form으로 입력 영역 감싸기
+# 계산 로직
+total_spent_month = month_df['amount'].sum() if not month_df.empty else 0
+total_budget = budget_df['amount'].sum() if not budget_df.empty else 0
+
+# 오늘 지출 계산
+if not month_df.empty:
+    today_spent = month_df[month_df['date'].str.startswith(today_str)]['amount'].sum()
+else:
+    today_spent = 0
+
+# UI: 3단 컬럼으로 핵심 지표 표시
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("📅 이번 달 지출", f"{total_spent_month:,}원")
+
+with col2:
+    if total_budget > 0:
+        remaining = total_budget - total_spent_month
+        st.metric("💰 남은 예산", f"{remaining:,}원", delta=remaining, delta_color="normal")
+    else:
+        st.metric("💰 예산 미설정", "-")
+
+with col3:
+    st.metric("🔥 오늘 쓴 돈", f"{today_spent:,}원")
+
+st.divider()
+
+# --- 3. 입력 UI (기존 코드 유지) ---
+st.subheader("📝 새 내역 기록")
+
+# [체크리스트] 여기에 본인만의 카테고리를 추가/수정하세요!
+CATEGORIES = ["외식", "식자재", "교통비", "생활비", "육아", "쇼핑", "주거", "의료", "공과금", "경조사", "취미", "기타"]
+
+input_type = st.radio("입력 방식", ["텍스트", "이미지 캡처"], horizontal=True, label_visibility="collapsed")
+
 with st.form("expense_form", clear_on_submit=False):
     user_content = None
     content_type = None
     
     if input_type == "텍스트":
-        # 텍스트 입력 시 엔터(Command+Enter)로도 제출 가능해짐
-        user_content = st.text_area("내용 입력", height=150, placeholder="예: 오늘 점심 중국집 18000원")
+        user_content = st.text_area("내용 입력", height=100, placeholder="예: 오늘 점심 순대국 9000원")
         content_type = 'text'
     else:
-        uploaded_file = st.file_uploader("이미지 업로드", type=['png', 'jpg', 'jpeg'])
+        uploaded_file = st.file_uploader("영수증/이미지 업로드", type=['png', 'jpg', 'jpeg'])
         if uploaded_file:
             user_content = Image.open(uploaded_file)
             content_type = 'image'
             st.image(user_content, caption="업로드된 이미지", width=300)
-
-    # Divider 추가
-    st.divider()
     
-    # Divider 추가 후 할부 선택 및 기록하기 버튼 배치
-    col_installment, col_submit = st.columns([1, 2])
-    
-    with col_installment:
-        installment_months = st.selectbox("할부(개월)", options=[1] + list(range(2, 25)))
-    
-    with col_submit:
-        # 버튼 높이를 맞추기 위한 여백 (선택사항)
-        st.write("") 
+    st.write("")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        installment_months = st.selectbox("할부(개월)", options=[1] + list(range(2, 13)))
+    with c2:
+        st.write("")
         st.write("")
         submitted = st.form_submit_button("기록하기 🚀", use_container_width=True)
 
-
-# --- 3. 실행 로직 (버튼 클릭 시에만 실행) ---
+# --- 4. 실행 로직 (기존과 동일, 프롬프트 개선 버전) ---
 if submitted:
     if not user_content:
-        st.warning("⚠️ 내용을 입력하거나 이미지를 올려주세요.")
+        st.warning("⚠️ 내용을 입력해주세요.")
     else:
-        with st.status("AI가 데이터를 분석하고 있습니다...", expanded=True) as status:
+        with st.status("AI가 분석 중입니다...", expanded=True) as status:
             try:
-                # [수정 1] 실제 오늘 날짜 구하기 (시스템 시간 기준)
-                today = datetime.now()
-                today_str = today.strftime("%Y-%m-%d")
+                # 날짜 동적 처리
+                status.write("⚙️ 1단계: 날짜 기준 설정 중...")
                 
-                # 1단계: 프롬프트 구성
-                status.write("⚙️ 1단계: Gemini에게 보낼 데이터 준비 중...")
-                
-                # [수정 2] 프롬프트에 '기준 날짜' 정보를 명확히 전달
                 prompt = f"""
                 당신은 가계부 정리 전문가입니다. 입력된 정보에서 다음 데이터를 추출해 JSON 형식으로만 응답하세요.
                 
                 [기준 정보]
-                - 오늘 날짜: {today_str} (사용자가 날짜를 명시하지 않으면 이 날짜를 사용하세요.)
-                - 연도: 별도 언급이 없으면 {today.year}년을 기준으로 하세요.
+                - 작성 기준일: {today_str} (별도 언급 없으면 이 날짜 사용)
+                - 기준 연도: {today.year}년
                 
                 [추출 항목]
-                1. date (YYYY-MM-DD 형식. 예: '2월 9일' -> '{today.year}-02-09')
+                1. date (YYYY-MM-DD 형식. 예: '어제' -> 계산해서 입력)
                 2. item (구매 항목 이름)
                 3. amount (금액, 숫자만, '원' 제외)
                 4. category (반드시 다음 중 선택: {CATEGORIES})
                 
-                JSON 예시: {{"date": "{today_str}", "item": "순대국", "amount": 12000, "category": "외식"}}
+                JSON 예시: {{"date": "{today_str}", "item": "커피", "amount": 4500, "category": "외식"}}
                 응답은 반드시 순수한 JSON 문자열이어야 합니다.
                 """
                 
@@ -112,17 +138,15 @@ if submitted:
                 else:
                     contents = [prompt, user_content]
                 
-                # 2단계: API 호출
-                status.write("📡 2단계: Google Gemini API 호출 중...")
+                status.write("📡 2단계: Gemini에게 물어보는 중...")
                 response = client.models.generate_content(
                     model=default_model_name,
                     contents=contents
                 )
                 
-                # 3단계: 결과 파싱
-                status.write("🔍 3단계: 응답 데이터 해석 중...")
+                status.write("🔍 3단계: 데이터 정리 중...")
                 if not response.text:
-                    raise ValueError("Gemini로부터 빈 응답이 왔습니다.")
+                    raise ValueError("응답이 비어있습니다.")
                     
                 clean_res = response.text.replace("```json", "").replace("```", "").strip()
                 raw_data = json.loads(clean_res)
@@ -132,7 +156,6 @@ if submitted:
                 
                 for item in items:
                     safe_entry = {
-                        # [수정 3] 날짜가 비어있을 경우의 기본값도 오늘 날짜(today_str)로 변경
                         "date": item.get("date", today_str),
                         "item": item.get("item", "알 수 없음"),
                         "amount": int(str(item.get("amount", 0)).replace(",","")), 
@@ -140,19 +163,35 @@ if submitted:
                     }
                     new_entries.append(safe_entry)
                 
-                status.write(f"✅ 데이터 추출 성공: {len(new_entries)}건")
-                
-                # 4단계: DB 저장
-                status.write("💾 4단계: 내 컴퓨터(SQLite)에 저장 중...")
-                if insert_expense(new_entries):
-                    status.update(label="🎉 모든 작업이 완료되었습니다!", state="complete", expanded=False)
-                    st.success(f"✅ 저장 성공! ({new_entries[0]['date']} / {new_entries[0]['item']} / {new_entries[0]['amount']:,}원)")
-                    
-                    st.json(new_entries)
+                # 할부 로직
+                final_entries = []
+                if installment_months > 1:
+                    status.write(f"➗ {installment_months}개월 할부 적용 중...")
+                    for entry in new_entries:
+                        total_amt = entry['amount']
+                        try:
+                            base_date = datetime.strptime(entry['date'], "%Y-%m-%d")
+                        except:
+                            base_date = datetime.now()
+                            
+                        monthly_amt = total_amt // installment_months
+                        for i in range(installment_months):
+                            next_date = base_date + relativedelta(months=i)
+                            inst_entry = entry.copy()
+                            inst_entry['date'] = next_date.strftime("%Y-%m-%d")
+                            inst_entry['amount'] = monthly_amt
+                            inst_entry['item'] = f"{entry['item']} ({i+1}/{installment_months})"
+                            final_entries.append(inst_entry)
                 else:
-                    status.update(label="❌ 저장 실패", state="error")
-                    st.error("데이터베이스 저장에 실패했습니다.")
+                    final_entries = new_entries
+                
+                status.write("💾 4단계: 저장 중...")
+                if insert_expense(final_entries):
+                    status.update(label="완료!", state="complete", expanded=False)
+                    st.success("✅ 저장되었습니다!")
+                    st.rerun() # [중요] 저장 후 화면을 새로고침해야 상단 지표가 바로 바뀝니다!
+                else:
+                    st.error("저장 실패")
                     
             except Exception as e:
-                status.update(label="❌ 처리 중 오류 발생", state="error")
-                st.error(f"상세 에러 내용: {e}")
+                st.error(f"오류: {e}")
