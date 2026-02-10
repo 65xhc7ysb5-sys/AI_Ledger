@@ -23,21 +23,31 @@ def init_db():
         )
     ''')
     
-    # 2. [신규] 고정 지출 설정 테이블
+    # 2. 고정 지출 테이블
     c.execute('''
         CREATE TABLE IF NOT EXISTS fixed_expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item TEXT NOT NULL,
             amount INTEGER NOT NULL,
             category TEXT NOT NULL,
-            payment_day INTEGER NOT NULL, -- 매월 결제일 (1~31)
+            payment_day INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # 3. [신규] 예산 테이블 (카테고리별 목표 금액)
+    # 카테고리는 중복되지 않게 PRIMARY KEY로 설정
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS budgets (
+            category TEXT PRIMARY KEY,
+            amount INTEGER
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
-# --- 일반 지출 관련 함수들 ---
+# --- 일반 지출 함수 ---
 def insert_expense(data_list):
     conn = get_connection()
     c = conn.cursor()
@@ -105,7 +115,7 @@ def update_expense(expense_id, column, new_value):
     finally:
         conn.close()
 
-# --- [신규] 고정 지출 관련 함수들 ---
+# --- 고정 지출 함수 ---
 def save_fixed_expense(item, amount, category, payment_day):
     conn = get_connection()
     c = conn.cursor()
@@ -140,5 +150,33 @@ def delete_fixed_expense(fixed_id):
         conn.commit()
     except Exception as e:
         st.error(f"고정 지출 삭제 실패: {e}")
+    finally:
+        conn.close()
+
+# --- [신규] 예산 관련 함수 ---
+def save_budget(category, amount):
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        # 이미 있으면 업데이트, 없으면 삽입 (INSERT OR REPLACE)
+        c.execute('''
+            INSERT OR REPLACE INTO budgets (category, amount)
+            VALUES (?, ?)
+        ''', (category, amount))
+        conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"예산 저장 실패: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_budgets():
+    conn = get_connection()
+    try:
+        df = pd.read_sql("SELECT * FROM budgets", conn)
+        return df
+    except Exception as e:
+        return pd.DataFrame()
     finally:
         conn.close()
