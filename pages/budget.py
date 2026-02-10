@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime
 import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import CATEGORIES
 
 # 상위 폴더 모듈 로드
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,8 +19,6 @@ st.caption("카테고리별 목표 금액을 설정하고 지출 현황을 점�
 # --- 1. 예산 설정 (입력) ---
 with st.container(border=True):
     st.subheader("➕ 새 예산 설정 / 수정")
-    
-    CATEGORIES = ["외식", "식자재", "교통비", "생활비", "육아", "쇼핑", "주거", "의료", "공과금", "경조사", "취미", "기타"]
     
     col1, col2, col3 = st.columns([2, 2, 1])
     

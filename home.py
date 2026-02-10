@@ -1,12 +1,18 @@
-import streamlit as st
-from google import genai
+import sys
 import os
 from PIL import Image
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+
+import streamlit as st
+from google import genai
+
 # [수정] 데이터를 조회하기 위해 load_data, get_budgets 추가
 from database import init_db, insert_expense, load_data, get_budgets 
+# Categories 불러오기
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import CATEGORIES
 
 # --- 1. 설정 및 초기화 ---
 st.set_page_config(page_title="AI 가계부 - 홈", page_icon="🏠")
@@ -77,9 +83,6 @@ st.divider()
 
 # --- 3. 입력 UI (기존 코드 유지) ---
 st.subheader("📝 새 내역 기록")
-
-# [체크리스트] 여기에 본인만의 카테고리를 추가/수정하세요!
-CATEGORIES = ["외식", "식자재", "교통비", "생활비", "육아", "쇼핑", "주거", "의료", "공과금", "경조사", "취미", "기타"]
 
 input_type = st.radio("입력 방식", ["텍스트", "이미지 캡처"], horizontal=True, label_visibility="collapsed")
 
