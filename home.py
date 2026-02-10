@@ -80,19 +80,30 @@ if submitted:
     if not user_content:
         st.warning("⚠️ 내용을 입력하거나 이미지를 올려주세요.")
     else:
-        # 상태 표시창
         with st.status("AI가 데이터를 분석하고 있습니다...", expanded=True) as status:
             try:
+                # [수정 1] 실제 오늘 날짜 구하기 (시스템 시간 기준)
+                today = datetime.now()
+                today_str = today.strftime("%Y-%m-%d")
+                
                 # 1단계: 프롬프트 구성
                 status.write("⚙️ 1단계: Gemini에게 보낼 데이터 준비 중...")
+                
+                # [수정 2] 프롬프트에 '기준 날짜' 정보를 명확히 전달
                 prompt = f"""
                 당신은 가계부 정리 전문가입니다. 입력된 정보에서 다음 데이터를 추출해 JSON 형식으로만 응답하세요.
-                1. date (YYYY-MM-DD 형식, 날짜가 없으면 오늘 날짜 2026-01-30 사용)
+                
+                [기준 정보]
+                - 오늘 날짜: {today_str} (사용자가 날짜를 명시하지 않으면 이 날짜를 사용하세요.)
+                - 연도: 별도 언급이 없으면 {today.year}년을 기준으로 하세요.
+                
+                [추출 항목]
+                1. date (YYYY-MM-DD 형식. 예: '2월 9일' -> '{today.year}-02-09')
                 2. item (구매 항목 이름)
                 3. amount (금액, 숫자만, '원' 제외)
                 4. category (반드시 다음 중 선택: {CATEGORIES})
                 
-                JSON 예시: {{"date": "2026-01-30", "item": "짜장면", "amount": 18000, "category": "외식"}}
+                JSON 예시: {{"date": "{today_str}", "item": "순대국", "amount": 12000, "category": "외식"}}
                 응답은 반드시 순수한 JSON 문자열이어야 합니다.
                 """
                 
@@ -121,7 +132,8 @@ if submitted:
                 
                 for item in items:
                     safe_entry = {
-                        "date": item.get("date", "2026-01-30"),
+                        # [수정 3] 날짜가 비어있을 경우의 기본값도 오늘 날짜(today_str)로 변경
+                        "date": item.get("date", today_str),
                         "item": item.get("item", "알 수 없음"),
                         "amount": int(str(item.get("amount", 0)).replace(",","")), 
                         "category": item.get("category", "기타")
@@ -130,46 +142,12 @@ if submitted:
                 
                 status.write(f"✅ 데이터 추출 성공: {len(new_entries)}건")
                 
-                # --- [여기부터 할부 로직 추가] ---
-                final_entries = []
-                
-                if installment_months > 1:
-                    status.write(f"➗ {installment_months}개월 할부 적용 중...")
-                    for entry in new_entries:
-                        total_amount = entry['amount']
-                        base_date_str = entry['date']
-                        
-                        # 문자열 날짜를 datetime 객체로 변환
-                        try:
-                            base_date = datetime.strptime(base_date_str, "%Y-%m-%d")
-                        except:
-                            base_date = datetime.now()
-
-                        # 월별 금액 계산 (원 단위 절삭을 위해 정수 나눗셈)
-                        monthly_amount = total_amount // installment_months
-                        
-                        for i in range(installment_months):
-                            # 한 달씩 더하기
-                            next_date = base_date + relativedelta(months=i)
-                            
-                            installment_entry = entry.copy()
-                            installment_entry['date'] = next_date.strftime("%Y-%m-%d")
-                            installment_entry['amount'] = monthly_amount
-                            installment_entry['item'] = f"{entry['item']} ({i+1}/{installment_months})"
-                            
-                            final_entries.append(installment_entry)
-                else:
-                    # 일시불이면 그대로 사용
-                    final_entries = new_entries
-
-
                 # 4단계: DB 저장
                 status.write("💾 4단계: 내 컴퓨터(SQLite)에 저장 중...")
-                if insert_expense(final_entries):
+                if insert_expense(new_entries):
                     status.update(label="🎉 모든 작업이 완료되었습니다!", state="complete", expanded=False)
-                    st.success(f"✅ 저장 성공! ({new_entries[0]['item']} - {new_entries[0]['amount']:,}원)")
+                    st.success(f"✅ 저장 성공! ({new_entries[0]['date']} / {new_entries[0]['item']} / {new_entries[0]['amount']:,}원)")
                     
-                    # 저장된 데이터 확인용 출력
                     st.json(new_entries)
                 else:
                     status.update(label="❌ 저장 실패", state="error")
