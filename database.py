@@ -1,7 +1,6 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
-import os
 
 DB_NAME = "ledger.db"
 
@@ -42,13 +41,35 @@ def insert_expense(data_list):
     finally:
         conn.close()
 
-def load_data():
+# [수정됨] 특정 월(month_str)을 받아서 필터링하는 기능 추가
+def load_data(month_str=None):
+    """
+    month_str: '2026-02' 형태의 문자열. None이면 전체 데이터 조회.
+    """
     conn = get_connection()
     try:
-        df = pd.read_sql("SELECT * FROM expenses ORDER BY date DESC", conn)
+        if month_str and month_str != "전체 기간":
+            # SQLite의 LIKE를 사용하여 '2026-02%' 패턴으로 검색
+            query = "SELECT * FROM expenses WHERE date LIKE ? ORDER BY date DESC"
+            df = pd.read_sql(query, conn, params=(f"{month_str}%",))
+        else:
+            df = pd.read_sql("SELECT * FROM expenses ORDER BY date DESC", conn)
         return df
     except Exception as e:
         return pd.DataFrame()
+    finally:
+        conn.close()
+
+# [신규 추가] 데이터가 존재하는 '연-월' 목록 가져오기 (필터용)
+def get_available_months():
+    conn = get_connection()
+    try:
+        # 날짜(date)에서 앞 7자리(YYYY-MM)만 잘라서 중복 제거하고 가져옴
+        query = "SELECT DISTINCT substr(date, 1, 7) as month FROM expenses ORDER BY month DESC"
+        df = pd.read_sql(query, conn)
+        return df['month'].tolist()
+    except Exception as e:
+        return []
     finally:
         conn.close()
 
@@ -63,18 +84,10 @@ def delete_expense(expense_id):
     finally:
         conn.close()
 
-# [✨ 새로 추가된 함수] 데이터 수정
 def update_expense(expense_id, column, new_value):
-    """
-    expense_id: 수정할 데이터의 ID
-    column: 수정할 컬럼명 (예: 'amount', 'item', 'category')
-    new_value: 새로운 값
-    """
     conn = get_connection()
     c = conn.cursor()
     try:
-        # 동적 쿼리 사용 (컬럼명은 매개변수로 바인딩되지 않으므로 f-string 사용)
-        # 보안: column 변수는 코드 내부에서만 제어하므로 SQL Injection 위험 낮음
         query = f"UPDATE expenses SET {column} = ? WHERE id = ?"
         c.execute(query, (new_value, int(expense_id)))
         conn.commit()
