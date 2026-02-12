@@ -1,139 +1,117 @@
-import sys
+import streamlit as st
+from google import genai
 import os
 from PIL import Image
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+# get_categories가 추가되었습니다.
+from database import init_db, insert_expense, load_data, get_budgets, get_categories
 
-import streamlit as st
-from google import genai
-
-# [수정] 데이터를 조회하기 위해 load_data, get_budgets 추가
-from database import init_db, insert_expense, load_data, get_budgets 
-# Categories 불러오기
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config import CATEGORIES
-
-# --- 1. 설정 및 초기화 ---
 st.set_page_config(page_title="AI 가계부 - 홈", page_icon="🏠")
 
-# 앱 시작 시 DB 초기화
-try:
-    init_db()
-except Exception as e:
-    st.error(f"초기화 오류: {e}")
+# 앱 시작 시 DB 초기화 (카테고리 테이블 생성 등)
+init_db()
 
-# API 키 설정 (기존과 동일)
+# --- (API 키 설정 코드는 기존과 동일하므로 생략) ---
 try:
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
     else:
         api_key = os.getenv("GEMINI_API_KEY")
-    
-    if not api_key:
-        st.error("⚠️ API 키가 없습니다.")
-        st.stop()
-        
     client = genai.Client(api_key=api_key)
-except Exception as e:
-    st.error(f"⚠️ 설정 오류: {e}")
+except:
     st.stop()
-
+    
 default_model_name = 'gemini-2.5-flash'
 
-# --- 2. [신규] 상단 요약 대시보드 (HUD) ---
+# --- 2. 상단 요약 (HUD) ---
 st.title("🏠 나의 자산 현황")
-
-# 날짜 기준
 today = datetime.now()
 current_month_str = today.strftime("%Y-%m")
 today_str = today.strftime("%Y-%m-%d")
 
-# 데이터 가져오기
-month_df = load_data(current_month_str)
+# [수정] DB에서 카테고리 목록을 실시간으로 가져옴
+CATEGORIES = get_categories()
+if not CATEGORIES:
+    CATEGORIES = ["미분류"] # 비상용
+
+# 데이터 로드 (전체 보기 기준)
+month_df = load_data(current_month_str) 
 budget_df = get_budgets()
 
-# 계산 로직
 total_spent_month = month_df['amount'].sum() if not month_df.empty else 0
 total_budget = budget_df['amount'].sum() if not budget_df.empty else 0
 
-# 오늘 지출 계산
 if not month_df.empty:
     today_spent = month_df[month_df['date'].str.startswith(today_str)]['amount'].sum()
 else:
     today_spent = 0
 
-# UI: 3단 컬럼으로 핵심 지표 표시
 col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("📅 이번 달 지출", f"{total_spent_month:,}원")
-
-with col2:
-    if total_budget > 0:
-        remaining = total_budget - total_spent_month
-        st.metric("💰 남은 예산", f"{remaining:,}원", delta=remaining, delta_color="normal")
-    else:
-        st.metric("💰 예산 미설정", "-")
-
-with col3:
-    st.metric("🔥 오늘 쓴 돈", f"{today_spent:,}원")
+col1.metric("📅 이번 달 지출", f"{total_spent_month:,}원")
+remaining = total_budget - total_spent_month
+col2.metric("💰 남은 예산", f"{remaining:,}원", delta=remaining)
+col3.metric("🔥 오늘 쓴 돈", f"{today_spent:,}원")
 
 st.divider()
 
-# --- 3. 입력 UI (기존 코드 유지) ---
+# --- 3. 입력 UI ---
 st.subheader("📝 새 내역 기록")
 
 input_type = st.radio("입력 방식", ["텍스트", "이미지 캡처"], horizontal=True, label_visibility="collapsed")
 
 with st.form("expense_form", clear_on_submit=False):
+    # [핵심 추가] 지출 주체 선택
+    st.write("👤 **누가 썼나요?**")
+    spender = st.radio("지출 주체", ["공동", "남편", "아내", "아이"], horizontal=True, label_visibility="collapsed")
+    
+    st.write("---")
+    
     user_content = None
     content_type = None
-    
     if input_type == "텍스트":
         user_content = st.text_area("내용 입력", height=100, placeholder="예: 오늘 점심 순대국 9000원")
         content_type = 'text'
     else:
-        uploaded_file = st.file_uploader("영수증/이미지 업로드", type=['png', 'jpg', 'jpeg'])
+        uploaded_file = st.file_uploader("이미지 업로드", type=['png', 'jpg', 'jpeg'])
         if uploaded_file:
             user_content = Image.open(uploaded_file)
             content_type = 'image'
             st.image(user_content, caption="업로드된 이미지", width=300)
     
-    st.write("")
-    c1, c2 = st.columns([1, 2])
-    with c1:
+    col1, col2 = st.columns([1, 2])
+    with col1:
         installment_months = st.selectbox("할부(개월)", options=[1] + list(range(2, 13)))
-    with c2:
-        st.write("")
+    with col2:
+        st.write("") 
         st.write("")
         submitted = st.form_submit_button("기록하기 🚀", use_container_width=True)
 
-# --- 4. 실행 로직 (기존과 동일, 프롬프트 개선 버전) ---
+# --- 4. 실행 로직 ---
 if submitted:
     if not user_content:
         st.warning("⚠️ 내용을 입력해주세요.")
     else:
         with st.status("AI가 분석 중입니다...", expanded=True) as status:
             try:
-                # 날짜 동적 처리
-                status.write("⚙️ 1단계: 날짜 기준 설정 중...")
-                
+                status.write("⚙️ 1단계: 날짜 및 분류 기준 설정...")
+                # 프롬프트에 DB에서 가져온 최신 CATEGORIES를 넣어줍니다.
                 prompt = f"""
-                당신은 가계부 정리 전문가입니다. 입력된 정보에서 다음 데이터를 추출해 JSON 형식으로만 응답하세요.
+                당신은 가계부 정리 전문가입니다. 
                 
                 [기준 정보]
-                - 작성 기준일: {today_str} (별도 언급 없으면 이 날짜 사용)
+                - 작성 기준일: {today_str}
                 - 기준 연도: {today.year}년
+                - 가능 카테고리: {", ".join(CATEGORIES)} (이 중에서만 선택, 없으면 '기타')
                 
                 [추출 항목]
-                1. date (YYYY-MM-DD 형식. 예: '어제' -> 계산해서 입력)
-                2. item (구매 항목 이름)
-                3. amount (금액, 숫자만, '원' 제외)
-                4. category (반드시 다음 중 선택: {CATEGORIES})
+                1. date (YYYY-MM-DD)
+                2. item (항목명)
+                3. amount (금액, 숫자만)
+                4. category (위 목록 중 하나)
                 
                 JSON 예시: {{"date": "{today_str}", "item": "커피", "amount": 4500, "category": "외식"}}
-                응답은 반드시 순수한 JSON 문자열이어야 합니다.
                 """
                 
                 if content_type == 'text':
@@ -141,16 +119,12 @@ if submitted:
                 else:
                     contents = [prompt, user_content]
                 
-                status.write("📡 2단계: Gemini에게 물어보는 중...")
+                status.write("📡 2단계: Gemini 분석 중...")
                 response = client.models.generate_content(
                     model=default_model_name,
                     contents=contents
                 )
                 
-                status.write("🔍 3단계: 데이터 정리 중...")
-                if not response.text:
-                    raise ValueError("응답이 비어있습니다.")
-                    
                 clean_res = response.text.replace("```json", "").replace("```", "").strip()
                 raw_data = json.loads(clean_res)
                 
@@ -162,21 +136,18 @@ if submitted:
                         "date": item.get("date", today_str),
                         "item": item.get("item", "알 수 없음"),
                         "amount": int(str(item.get("amount", 0)).replace(",","")), 
-                        "category": item.get("category", "기타")
+                        "category": item.get("category", "기타"),
+                        "spender": spender # [중요] 사용자가 선택한 주체 할당
                     }
                     new_entries.append(safe_entry)
                 
-                # 할부 로직
+                # 할부 로직 (기존 유지)
                 final_entries = []
                 if installment_months > 1:
-                    status.write(f"➗ {installment_months}개월 할부 적용 중...")
                     for entry in new_entries:
                         total_amt = entry['amount']
-                        try:
-                            base_date = datetime.strptime(entry['date'], "%Y-%m-%d")
-                        except:
-                            base_date = datetime.now()
-                            
+                        try: base_date = datetime.strptime(entry['date'], "%Y-%m-%d")
+                        except: base_date = datetime.now()
                         monthly_amt = total_amt // installment_months
                         for i in range(installment_months):
                             next_date = base_date + relativedelta(months=i)
@@ -191,10 +162,9 @@ if submitted:
                 status.write("💾 4단계: 저장 중...")
                 if insert_expense(final_entries):
                     status.update(label="완료!", state="complete", expanded=False)
-                    st.success("✅ 저장되었습니다!")
-                    st.rerun() # [중요] 저장 후 화면을 새로고침해야 상단 지표가 바로 바뀝니다!
+                    st.success(f"✅ [{spender}] 명의로 저장되었습니다!")
+                    st.rerun()
                 else:
                     st.error("저장 실패")
-                    
             except Exception as e:
                 st.error(f"오류: {e}")
