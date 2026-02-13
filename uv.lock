@@ -13,6 +13,7 @@ dependencies = [
     { name = "pillow" },
     { name = "python-dateutil" },
     { name = "streamlit" },
+    { name = "tenacity" },
 ]
 
 [package.metadata]
@@ -23,6 +24,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
     { name = "streamlit", specifier = ">=1.28.0" },
+    { name = "tenacity", specifier = ">=9.1.2" },
 ]
 
 [[package]]
