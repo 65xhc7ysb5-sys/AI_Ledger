@@ -5,6 +5,7 @@ import os
 import plotly.express as px
 import plotly.graph_objects as go
 
+# [신규] 부분 갱신(fragment) 지원
 try:
     from streamlit import fragment
 except ImportError:
@@ -13,16 +14,87 @@ except ImportError:
     except ImportError:
         def fragment(func): return func
 
+# [신규] 팝업창(dialog) 지원. (구버전 Streamlit을 위한 안전장치 포함)
+try:
+    dialog = st.dialog
+except AttributeError:
+    try:
+        dialog = st.experimental_dialog
+    except AttributeError:
+        # 팝업을 지원하지 않는 구버전의 경우 화면 아래에 펼침막(Expander)으로 대체하여 에러 방지
+        def dialog(title):
+            def decorator(func):
+                def wrapper(*args, **kwargs):
+                    with st.expander(f"🔍 {title} 팝업", expanded=True):
+                        func(*args, **kwargs)
+                return wrapper
+            return decorator
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from database import (
     load_data, delete_expense, update_expense, get_available_months, 
     DB_NAME, get_categories, add_category, delete_category_safe,
-    get_category_mapping # DB에서 직접 매핑을 가져옵니다
+    get_category_mapping 
 )
 
 st.set_page_config(page_title="가계부 대시보드", page_icon="📊", layout="wide")
 
-# --- 1. 사이드바 (카테고리 성향 선택 기능 추가) ---
+# ==========================================
+# 🔍 [팝업 함수] 클릭 시 뜰 팝업 UI 정의
+# ==========================================
+@dialog("🔍 상세 소비 내역 분석")
+def show_pie_detail_dialog(selected_label, filter_col, dataframe):
+    st.markdown(f"### 🏷️ '{selected_label}' 집중 분석")
+    st.caption("팝업을 닫으려면 바깥 영역을 클릭하거나 X 버튼을 누르세요. (선택 해제는 차트 빈 공간 클릭)")
+    
+    # 1. 클릭한 항목(소비성향 또는 카테고리)으로 데이터 필터링
+    filtered_df = dataframe[dataframe[filter_col] == selected_label]
+    
+    if filtered_df.empty:
+        st.info("해당 내역이 없습니다.")
+        return
+        
+    # 2. 항목별 합산 계산 (가장 많이 쓴 곳부터 정렬)
+    summary = filtered_df.groupby('item').agg(
+        지출건수=('id', 'count'),
+        총금액=('amount', 'sum')
+    ).reset_index()
+    
+    summary = summary.sort_values('총금액', ascending=False)
+    total_sum = summary['총금액'].sum()
+    summary['비중'] = (summary['총금액'] / total_sum * 100).apply(lambda x: f"{x:.1f}%")
+    
+    # 3. 요약 표 출력
+    st.dataframe(
+        summary,
+        column_config={
+            "item": "소비 내역 (어디에 썼나요?)",
+            "지출건수": st.column_config.NumberColumn("결제 건수", format="%d건"),
+            "총금액": st.column_config.NumberColumn("합산 금액", format="%d원"),
+            "비중": "차지하는 비중"
+        },
+        hide_index=True,
+        use_container_width=True
+    )
+    
+    # 4. 개별 상세 내역 (옵션)
+    st.write("---")
+    with st.expander("📝 개별 결제 상세 내역 모두 보기"):
+        raw_display = filtered_df[['date', 'item', 'amount', 'spender']].sort_values('date', ascending=False)
+        st.dataframe(
+            raw_display,
+            column_config={
+                "date": "날짜",
+                "item": "결제 내역",
+                "amount": st.column_config.NumberColumn("결제 금액", format="%d원"),
+                "spender": "사용자"
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+
+
+# --- 1. 사이드바 (카테고리 성향 선택 기능) ---
 with st.sidebar:
     st.header("🔍 조회 설정")
     spender_filter = st.radio("👤 사용자 선택", ["전체", "공동", "남편", "아내", "아이"])
@@ -41,7 +113,6 @@ with st.sidebar:
     st.divider()
     
     with st.expander("🏷️ 카테고리 관리"):
-        # [수정] 카테고리 추가 시 소비 성향도 함께 받도록 UI 추가
         cat_type = st.radio("소비 성향", ["필수소비 (Needs)", "선택소비 (Wants)"], horizontal=True)
         new_cat = st.text_input("새 카테고리 추가", placeholder="예: 반려동물")
         
@@ -83,7 +154,7 @@ if df.empty:
     st.info("데이터가 없습니다.")
     st.stop()
 
-# [핵심] 하드코딩된 리스트 대신, DB에서 매핑을 불러와 동적으로 소비성향 부여
+# DB에서 매핑을 불러와 동적으로 소비성향 부여
 category_mapping = get_category_mapping()
 df['소비성향'] = df['category'].map(lambda x: category_mapping.get(x, "미분류"))
 
@@ -160,8 +231,34 @@ with tab1:
         fig_pie.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30))
         st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
 
+    # ==========================================
+    # [대안 적용] 100% 작동하는 심층 분석 선택기
+    # ==========================================
+    st.markdown("---")
+    st.markdown("#### 🔍 상세 내역 팝업 분석")
+    st.caption("차트에서 확인한 비중의 구체적인 내역이 궁금하다면 아래에서 선택해 보세요.")
+    
+    col_sel1, col_sel2 = st.columns(2)
+    
+    with col_sel1:
+        # 필수/선택 소비 분석 트리거
+        type_options = ["분석할 성향 선택..."] + list(df['소비성향'].unique())
+        selected_type = st.selectbox("⚖️ 필수/선택소비 분석", type_options, label_visibility="collapsed")
+        if selected_type != "분석할 성향 선택...":
+            if st.button(f"'{selected_type}' 상세 보기 👆", use_container_width=True):
+                show_pie_detail_dialog(selected_type, '소비성향', df)
+                
+    with col_sel2:
+        # 개별 카테고리 분석 트리거
+        cat_options = ["분석할 카테고리 선택..."] + list(df['category'].unique())
+        selected_cat = st.selectbox("🍕 카테고리 분석", cat_options, label_visibility="collapsed")
+        if selected_cat != "분석할 카테고리 선택...":
+            if st.button(f"'{selected_cat}' 상세 보기 👆", use_container_width=True):
+                show_pie_detail_dialog(selected_cat, 'category', df)
+
     st.divider()
     
+    # --- 일별 지출 추이 (기존 코드 유지) ---
     st.markdown("#### 📅 일별 지출 추이")
     def format_item(item, amount):
         short_item = item if len(item) <= 10 else item[:10] + ".."
@@ -186,7 +283,7 @@ with tab1:
     ))
     fig_line.update_layout(yaxis=dict(tickformat=".0f", ticksuffix="만"), hovermode="x unified", dragmode=False, height=350, margin=dict(t=10, b=10))
     st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': False})
-
+    
 
 with tab2:
     col1, col2 = st.columns(2)
@@ -211,7 +308,6 @@ with tab3:
     def expense_editor_section():
         current_df = st.session_state['dashboard_data']
         latest_categories = get_categories()
-        # 매핑 재조회
         current_mapping = get_category_mapping()
 
         col_filter, _ = st.columns([1, 3])
@@ -227,7 +323,7 @@ with tab3:
             display_df,
             column_config={
                 "id": None,
-                "소비성향": st.column_config.TextColumn("소비성향", disabled=True), # 소비성향을 보여주되 수정은 불가능하게 설정
+                "소비성향": st.column_config.TextColumn("소비성향", disabled=True), 
                 "spender": st.column_config.SelectboxColumn("사용자", options=["공동", "남편", "아내", "아이"]),
                 "amount": st.column_config.NumberColumn("금액", format="%d원"),
                 "date": st.column_config.DateColumn("날짜", format="YYYY-MM-DD"),
@@ -252,13 +348,9 @@ with tab3:
                     
                     for col, val in changes.items():
                         if col == 'date': val = str(val).split('T')[0]
-                        # 1. DB 업데이트
                         update_expense(real_id, col, val)
-                        
-                        # 2. 메모리(전체 DF) 업데이트
                         st.session_state['dashboard_data'].loc[st.session_state['dashboard_data']['id'] == real_id, col] = val
                         
-                        # [핵심] 만약 수정한 항목이 '카테고리'라면, '소비성향'도 즉시 알맞게 바꿔줌
                         if col == 'category':
                             new_type = current_mapping.get(val, "미분류")
                             st.session_state['dashboard_data'].loc[st.session_state['dashboard_data']['id'] == real_id, '소비성향'] = new_type
