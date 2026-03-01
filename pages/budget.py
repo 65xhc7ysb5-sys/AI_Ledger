@@ -4,7 +4,7 @@ from datetime import datetime
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config import CATEGORIES
+from config import DEFAULT_CATEGORIES
 
 # 상위 폴더 모듈 로드
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -24,7 +24,7 @@ with st.container(border=True):
     
     with col1:
         # 카테고리 선택
-        cat = st.selectbox("카테고리", CATEGORIES, label_visibility="collapsed", placeholder="카테고리 선택")
+        cat = st.selectbox("카테고리", DEFAULT_CATEGORIES, label_visibility="collapsed", placeholder="카테고리 선택")
     with col2:
         # 금액 입력
         amt = st.number_input("목표 금액", min_value=0, step=10000, label_visibility="collapsed", placeholder="금액 (원)")

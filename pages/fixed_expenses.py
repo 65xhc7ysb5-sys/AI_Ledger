@@ -4,7 +4,7 @@ from datetime import datetime
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config import CATEGORIES
+from config import DEFAULT_CATEGORIES
 
 # 상위 폴더 모듈 로드
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -87,7 +87,7 @@ with col1:
         item_name = st.text_input("항목명 (예: 넷플릭스)")
         amount = st.number_input("금액", min_value=0, step=1000)
         
-        category = st.selectbox("카테고리", CATEGORIES)
+        category = st.selectbox("카테고리", DEFAULT_CATEGORIES)
         
         day = st.number_input("매월 결제일 (1~31)", min_value=1, max_value=31, value=1)
         
