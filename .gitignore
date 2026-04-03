@@ -1,0 +1,30 @@
+# Secret files
+.env
+.streamlit/secrets.toml
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.python-version
+.streamlit
+.DS_Store
+
+# Database
+ledger.db
+
+# Dev/test scripts
+test_db.py
+check_models.py
+
+# Claude Code
+CLAUDE.md
+
+# Archives
+pages/archive/
