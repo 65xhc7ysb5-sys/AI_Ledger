@@ -15,7 +15,7 @@ from components.formatters import format_korean
 
 # Import 상수 
 from config import (
-    MONTHLY_INCOME, CURRENT_INVESTMENT, CURRENT_CHONGSEK_DEPOSIT,
+    MONTHLY_INCOME, CURRENT_INVESTMENT, CURRENT_JEONSE_DEPOSIT,
     CURRENT_SAVINGS_DEPOSIT, MONTHLY_SAVING_TARGET, TARGET_EQUITY,
     TARGET_PRICE_LOW, TARGET_PRICE_HIGH, VARIABLE_BUDGET_LIMIT, 
     TARGET_DATE_YEAR, TARGET_DATE_MONTH, MORTGAGE_RATE, MORTGAGE_YEARS,
@@ -223,7 +223,7 @@ def calc_savings_speed(manual_saving: int = None) -> dict:
 
     months_left     = months_until(TARGET_DATE_YEAR, TARGET_DATE_MONTH)
     expected_accum  = avg * months_left
-    expected_equity = (CURRENT_INVESTMENT + CURRENT_CHONGSEK_DEPOSIT
+    expected_equity = (CURRENT_INVESTMENT + CURRENT_JEONSE_DEPOSIT
                        + CURRENT_SAVINGS_DEPOSIT + expected_accum)
     prob = min(expected_equity / TARGET_EQUITY * 100, 100.0)
     return dict(avg_saving=avg, months_left=months_left,
@@ -414,56 +414,65 @@ init_watch_list()
 
 with st.sidebar:
     st.markdown("### ⚙️ 시뮬레이션 설정")
-    sim_equity  = st.slider("자기자본(억)", 3.0, 6.0, 5.0, 0.05,
+    sim_equity  = st.slider("자기자본(억)", 2.0, 6.0, 5.0, 0.5,
                              key="sim_equity") * 1e8
-    sim_price   = st.slider("매수가(억)",   7.0, 9.5, 8.25, 0.1,
+    sim_price   = st.slider("매수가(억)",   5.0, 15.0, 9.0, 0.5,
                              key="sim_price") * 1e8
-    sim_rate    = st.slider("금리(%)",      2.5, 6.0, 4.0, 0.1,
+    sim_rate    = st.slider("금리(%)",      2.0, 8.0, 4.0, 0.5,
                              key="sim_rate") / 100
-    sim_years   = st.selectbox("대출기간", [20, 25, 30], index=2,
+    sim_years   = st.selectbox("대출기간", [5, 10, 20, 25, 30, 40], index=2,
                                 key="sim_years")
     excess_amt  = st.number_input("이번 달 초과 지출액(원)",
-                                   value=3_240_000, step=10_000,
+                                   value=500_000, step=10_000,
                                    key="excess_amount")
 
     st.divider()
     st.markdown("### 💰 월 저축액 계산 방식")
 
-    saving_mode = st.radio(
-        "계산 기준",
-        ["DB 실지출 역산 (최근 3개월)", "예산 기반 (budgets 테이블)", "직접 입력"],
-        index=0,
-        key="saving_mode",
-        help=(
-            "DB 역산: 소득 - 최근 3개월 평균 실지출\n"
-            "예산 기반: 소득 - 설정한 월 총 예산\n"
-            "직접 입력: 실제 저축 중인 금액 수동 입력"
-        ),
+    # saving_mode = st.radio(
+    #     "계산 기준",
+    #     ["DB 실지출 역산 (최근 3개월)", "예산 기반 (budgets 테이블)", "직접 입력"],
+    #     index=0,
+    #     key="saving_mode",
+    #     help=(
+    #         "DB 역산: 소득 - 최근 3개월 평균 실지출\n"
+    #         "예산 기반: 소득 - 설정한 월 총 예산\n"
+    #         "직접 입력: 실제 저축 중인 금액 수동 입력"
+    #     ),
+    # )
+    manual_saving_input = st.number_input(
+        "월 저축액 직접 입력 (원)",
+        min_value=0,
+        max_value=MONTHLY_INCOME,
+        value=MONTHLY_SAVING_TARGET,
+        step=100_000,
+        key="manual_saving",
     )
+    _saving_arg = manual_saving_input
 
-    if saving_mode == "직접 입력":
-        manual_saving_input = st.number_input(
-            "월 저축액 직접 입력 (원)",
-            min_value=0,
-            max_value=MONTHLY_INCOME,
-            value=MONTHLY_SAVING_TARGET,
-            step=100_000,
-            key="manual_saving",
-        )
-        _saving_arg = manual_saving_input
-    elif saving_mode == "예산 기반 (budgets 테이블)":
-        _b_df = get_budgets()
-        _planned = int(_b_df["amount"].sum()) if not _b_df.empty else None
-        if _planned:
-            st.caption(
-                f"📋 설정 예산 합계: **{_planned:,}원**  \n"
-                f"→ 예상 저축: **{MONTHLY_INCOME - _planned:,}원**"
-            )
-        else:
-            st.warning("⚠️ 예산이 설정되지 않았습니다. budget 페이지에서 먼저 설정하세요.")
-        _saving_arg = -1   # calc_savings_speed에서 budgets 모드 트리거
-    else:
-        _saving_arg = None  # DB 역산 모드 (기존)
+    # if saving_mode == "직접 입력":
+    #     manual_saving_input = st.number_input(
+    #         "월 저축액 직접 입력 (원)",
+    #         min_value=0,
+    #         max_value=MONTHLY_INCOME,
+    #         value=MONTHLY_SAVING_TARGET,
+    #         step=100_000,
+    #         key="manual_saving",
+    #     )
+    #     _saving_arg = manual_saving_input
+    # elif saving_mode == "예산 기반 (budgets 테이블)":
+    #     _b_df = get_budgets()
+    #     _planned = int(_b_df["amount"].sum()) if not _b_df.empty else None
+    #     if _planned:
+    #         st.caption(
+    #             f"📋 설정 예산 합계: **{_planned:,}원**  \n"
+    #             f"→ 예상 저축: **{MONTHLY_INCOME - _planned:,}원**"
+    #         )
+    #     else:
+    #         st.warning("⚠️ 예산이 설정되지 않았습니다. budget 페이지에서 먼저 설정하세요.")
+    #     _saving_arg = -1   # calc_savings_speed에서 budgets 모드 트리거
+    # else:
+    #     _saving_arg = None  # DB 역산 모드 (기존)
 
     st.divider()
     st.markdown("### 🏢 관심 단지 필터")
@@ -559,7 +568,7 @@ with tab1:
         ("절약 +35만", sp["avg_saving"] + 350_000),
     ]:
         accum  = saving * sp["months_left"]
-        equity = CURRENT_INVESTMENT + CURRENT_CHONGSEK_DEPOSIT + \
+        equity = CURRENT_INVESTMENT + CURRENT_JEONSE_DEPOSIT + \
                  CURRENT_SAVINGS_DEPOSIT + accum
         prob   = min(equity / TARGET_EQUITY * 100, 100.0)
         short  = max(TARGET_EQUITY - equity, 0)
@@ -585,7 +594,7 @@ with tab1:
     if result_df.empty or "최근거래가(만)" not in result_df.columns:
         st.info("⚙️ 사이드바에서 단지를 활성화하면 매수 가능성 분석이 표시됩니다.")
     else:
-        eq_now   = float(sim_equity)            # 사이드바 현재 자기자본
+        eq_now   = CURRENT_INVESTMENT + CURRENT_JEONSE_DEPOSIT + CURRENT_SAVINGS_DEPOSIT   # 현재 자기자본
         eq_2029  = sp["expected_equity"]        # 2029.02 예상 자기자본
 
         # DSR 40% 기준 최대 대출원금 (MORTGAGE_RATE, MORTGAGE_YEARS 상수 사용)
@@ -607,12 +616,18 @@ with tab1:
             growth         = REGION_GROWTH.get(r["지역"], 0.03)
             price_2029_won = price_now_won * ((1 + growth) ** 3)
 
-            # 현재 매수: 현 자기자본 >= 단지현재가 × 30% (LTV 70% 가정)
-            can_now  = eq_now >= price_now_won * 0.3
+            # 현재 매수: 현 자기자본 >= 단지현재가 × 30% (LTV 70% 가정)            
+            can_now = (eq_now >= price_now_won * 0.3) and ((eq_now + max_loan_dsr) >= price_now_won)
+
+            
             # 2029 매수: 예상 자기자본 + DSR 최대대출 >= 2029 예상 단지가
             can_2029 = (eq_2029 + max_loan_dsr) >= price_2029_won
 
-            short_now  = max(price_now_won * 0.3 - eq_now, 0) / 10_000
+            short_now = max(
+                price_now_won * 0.3 - eq_now,              # LTV 부족분
+                price_now_won - eq_now - max_loan_dsr,      # 총액 부족분
+                0
+            ) / 10_000
             short_2029 = max(price_2029_won - eq_2029 - max_loan_dsr, 0) / 10_000
 
             diag_rows.append({
@@ -803,7 +818,7 @@ with tab3:
             st.info("⚙️ 사이드바에서 단지를 활성화하거나 위에서 단지를 추가해 주세요.")
 
     if not result_df.empty:
-        equity_input = float(sim_equity)
+        equity_input = CURRENT_INVESTMENT + CURRENT_JEONSE_DEPOSIT + CURRENT_SAVINGS_DEPOSIT
 
         for region in sorted(result_df["지역"].unique()):
             st.markdown(f"### 📍 {region}")
@@ -816,9 +831,13 @@ with tab3:
 
                 st.markdown(f"**{icon} {cat}**")
 
-                cat_df["매수가능"] = cat_df["갭(만)"].apply(
-                    lambda g: "✅ 가능" if (g is not None and g * 10000 <= equity_input)
-                              else "❌ 갭 부족"
+                # price_now_won 기준 LTV 30% 자기자본 필요
+                cat_df["매수가능"] = cat_df.apply(
+                    lambda row: "✅ 가능" if (
+                        row["최근거래가(만)"] is not None
+                        and equity_input >= row["최근거래가(만)"] * 10_000 * 0.3
+                    ) else "❌ 자기자본 부족",
+                    axis=1
                 )
 
                 display_cols = ["단지명", "전용㎡", "최근거래가(만)", "평균거래가(만)",
@@ -841,7 +860,7 @@ with tab3:
             if "의정부" in region:
                 st.info("🏠 현 거주지 인근 — 이사 비용·생활 반경 유지 시 갭 최소 전략")
 
-        st.caption(f"📊 자기자본 {equity_input/1e8:.2f}억 기준 매수가능 여부 표시 | 사이드바에서 조정")
+        st.caption(f"📊 현재 자기자본 {equity_input/1e8:.2f}억 기준 매수가능 여부 | 2029 목표: {float(sim_equity)/1e8:.2f}억")
 
 
 # ── Tab 4: 주담대 시뮬레이터 ─────────────────────────────────
@@ -988,6 +1007,19 @@ with tab6:
 
     gap_df = pd.DataFrame(gap_rows)
 
+    row_2029 = gap_df[gap_df["연도"] == 2029].iloc[0] if not gap_df[gap_df["연도"] == 2029].empty else None
+    gap_2029 = row_2029["Gap(성북-의정부)"] if row_2029 is not None else 0.0
+
+    # 경고 로직도 방어 처리
+    if row_2029 is None:
+        st.warning("2029년 데이터가 없습니다. _GAP_YEARS 범위를 확인하세요.")
+    else:
+        equity_2029 = row_2029["내 자기자본"]
+        if gap_2029 > equity_2029 * 0.6:
+            st.error(...)
+        else:
+            st.success(...)
+
     # ── Plotly 라인차트 ───────────────────────────────────────
     fig_gap = make_gap_chart(gap_df, target_year=2029)
     st.plotly_chart(fig_gap, use_container_width=True)
@@ -1023,6 +1055,43 @@ with tab6:
             delta=f"+{opp:,.0f}원",
         )
         st.info(f"이 돈을 파킹하면 {opp:,.0f}원 더 모을 수 있습니다.")
+
+
+# ── DSR 시뮬레이터 ───────────────────────────────────────────────
+with st.expander("DSR 시뮬레이터 (매수 구매력 계산)"):
+    d_col1, d_col2, d_col3 = st.columns(3)
+    with d_col1:
+        dsr_income = st.number_input(
+            "예상 가구 월소득 (원)",
+            min_value=0, value=10_800_000, step=10_000, format="%d",
+            key="dsr_income"
+        )
+        st.caption(f"= {format_korean(dsr_income)}")
+    with d_col2:
+        dsr_rate = st.slider(
+            "대출 금리 (%)", min_value=2.0, max_value=7.0, value=4.0, step=0.1,
+            key="dsr_rate"
+        )
+    with d_col3:
+        dsr_years = st.selectbox("대출 기간", [5, 10, 20, 25, 30, 40], index=2, key="dsr_years")
+
+    max_loan  = calculate_max_loan(dsr_income, dsr_rate, dsr_years)
+    total_buy = TARGET_EQUITY + max_loan
+    buy_gap   = total_buy - TARGET_PRICE_HIGH
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("DSR 40% 최대 대출금", f"{max_loan:,}원")
+    m2.metric("총 매수 가능 금액 (자기 자본 + 최대 대출금)", f"{total_buy:,}원")
+    m3.metric(
+        f"목표 {TARGET_PRICE_HIGH/1e8:.1f}억 대비 Gap",
+        f"{buy_gap:+,}원",
+        delta_color="normal" if buy_gap >= 0 else "inverse"
+    )
+
+    if buy_gap >= 0:
+        st.success(f"목표 매수가 {TARGET_PRICE_HIGH:,}원 달성 가능")
+    else:
+        st.warning(f"목표 매수가 대비 {abs(buy_gap):,}원 부족")
 
 
 # ============================================================
