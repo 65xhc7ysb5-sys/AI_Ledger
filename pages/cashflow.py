@@ -10,14 +10,12 @@ from database import load_data, get_available_months
 from core.finance import calculate_fv as _sv_fv, calculate_asset_fv as _as_fv, calculate_max_loan
 from components.formatters import format_korean
 
+from config import TARGET_DATE_YEAR, TARGET_DATE_MONTH, TARGET_EQUITY, CURRENT_JEONSE_DEPOSIT, MONTHLY_SAVING_TARGET
+
 
 
 # ── 상수 ────────────────────────────────────────────────────────
-TARGET_DATE        = date(2029, 2, 1)
-TARGET_EQUITY      = 500_000_000
-TARGET_PRICE       = 850_000_000
-JEONSE_RECOVERY    = 260_000_000   # 전세보증금 회수 잔여 (고정)
-SAVINGS_THRESHOLD  = 3_250_000
+TARGET_DATE        = date(TARGET_DATE_YEAR, TARGET_DATE_MONTH, 1)
 
 
 # ── 순수 계산 함수 ───────────────────────────────────────────────
@@ -81,12 +79,6 @@ net_savings   = monthly_income - total_expense
 col1, col2, col3 = st.columns(3)
 col1.metric("월 소득", f"{monthly_income:,}원")
 col2.metric("총 지출", f"{total_expense:,}원")
-col3.metric("순저축액", f"{net_savings:,}원", delta=f"{net_savings - SAVINGS_THRESHOLD:+,}원")
-
-if net_savings < SAVINGS_THRESHOLD:
-    st.warning(f"⚠️ 목표 저축액 {SAVINGS_THRESHOLD:,}원 미달 (현재 {net_savings:,}원)")
-else:
-    st.success(f"목표 저축액 {SAVINGS_THRESHOLD:,}원 달성 (현재 {net_savings:,}원)")
 
 st.divider()
 
@@ -118,12 +110,12 @@ with col_r:
         "현재 청약저축 (원)", min_value=0, value=25_000_000, step=10_000, format="%d"
     )
     st.caption(f"= {format_korean(current_savings_deposit)}")
-    st.caption(f"전세보증금 회수 잔여: **{JEONSE_RECOVERY:,}원** (고정)")
+    st.caption(f"전세보증금 회수 잔여: **{CURRENT_JEONSE_DEPOSIT:,}원** (고정)")
 
 # 계산
 sv_fv = int(_sv_fv(monthly_saving, annual_return, remaining_months))
 as_fv = int(_as_fv(current_investment, annual_return, remaining_months))
-total_equity  = sv_fv + as_fv + current_savings_deposit + JEONSE_RECOVERY
+total_equity  = sv_fv + as_fv + current_savings_deposit + CURRENT_JEONSE_DEPOSIT
 progress_pct  = min(1.0, total_equity / TARGET_EQUITY)
 
 st.subheader(f"예상 자기자본: {total_equity:,}원")
@@ -138,7 +130,7 @@ else:
 # 연도별 적립 추이 차트
 chart_df = build_yearly_chart(
     monthly_saving, current_investment, annual_return,
-    current_savings_deposit, JEONSE_RECOVERY
+    current_savings_deposit, CURRENT_JEONSE_DEPOSIT
 )
 if not chart_df.empty:
     fig = go.Figure()
@@ -160,39 +152,3 @@ if not chart_df.empty:
         margin=dict(t=30, b=30),
     )
     st.plotly_chart(fig, use_container_width=True)
-
-# ── DSR 시뮬레이터 ───────────────────────────────────────────────
-with st.expander("DSR 시뮬레이터 (2029년 매수 구매력 계산)"):
-    d_col1, d_col2, d_col3 = st.columns(3)
-    with d_col1:
-        dsr_income = st.number_input(
-            "2029 예상 가구 월소득 (원)",
-            min_value=0, value=10_800_000, step=10_000, format="%d",
-            key="dsr_income"
-        )
-        st.caption(f"= {format_korean(dsr_income)}")
-    with d_col2:
-        dsr_rate = st.slider(
-            "대출 금리 (%)", min_value=2.0, max_value=7.0, value=4.0, step=0.1,
-            key="dsr_rate"
-        )
-    with d_col3:
-        dsr_years = st.selectbox("대출 기간", [20, 25, 30], index=2, key="dsr_years")
-
-    max_loan  = calculate_max_loan(dsr_income, dsr_rate, dsr_years)
-    total_buy = total_equity + max_loan
-    buy_gap   = total_buy - TARGET_PRICE
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("DSR 40% 최대 대출금", f"{max_loan:,}원")
-    m2.metric("총 매수 가능 금액", f"{total_buy:,}원")
-    m3.metric(
-        f"목표 {TARGET_PRICE/1e8:.1f}억 대비 Gap",
-        f"{buy_gap:+,}원",
-        delta_color="normal" if buy_gap >= 0 else "inverse"
-    )
-
-    if buy_gap >= 0:
-        st.success(f"목표 매수가 {TARGET_PRICE:,}원 달성 가능")
-    else:
-        st.warning(f"목표 매수가 대비 {abs(buy_gap):,}원 부족")

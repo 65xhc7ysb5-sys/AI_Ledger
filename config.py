@@ -7,7 +7,7 @@ load_dotenv()
 # ── 가구 프로필 (환경변수 우선, 없으면 임의의 값) ──
 MONTHLY_INCOME           = int(os.getenv("MONTHLY_INCOME",           7_000_000))
 CURRENT_INVESTMENT       = int(os.getenv("CURRENT_INVESTMENT",       50_000_000))
-CURRENT_CHONGSEK_DEPOSIT = int(os.getenv("CURRENT_CHONGSEK_DEPOSIT", 200_000_000))
+CURRENT_JEONSE_DEPOSIT = int(os.getenv("CURRENT_JEONSE_DEPOSIT", 260_000_000))
 CURRENT_SAVINGS_DEPOSIT  = int(os.getenv("CURRENT_SAVINGS_DEPOSIT",  20_000_000))
 MONTHLY_SAVING_TARGET    = int(os.getenv("MONTHLY_SAVING_TARGET",    3_250_000))
 TARGET_EQUITY            = int(os.getenv("TARGET_EQUITY",            500_000_000))
