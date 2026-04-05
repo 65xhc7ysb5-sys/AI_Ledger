@@ -5,7 +5,8 @@ from PIL import Image
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from database import init_db, insert_expense, load_data, get_budgets, get_categories
+from database import init_db, insert_expense, load_data, get_budgets, get_categories, get_last_entry_date  # DB 호출 함수
+from config import get_ledger_status_message 
 
 # [수정] google.api_core 의존성을 제거하고, tenacity만 사용합니다.
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
@@ -54,6 +55,7 @@ def generate_content_with_retry(model, contents):
     )
 
 # --- 2. 상단 요약 (HUD) ---
+
 st.title("🏠 나의 자산 현황")
 today = datetime.now()
 current_month_str = today.strftime("%Y-%m")
@@ -86,6 +88,23 @@ st.divider()
 
 # --- 3. 입력 UI ---
 st.subheader("📝 새 내역 기록")
+
+# 가장 마지막 날짜 기록 상단 메세지로 표시
+# 1. 데이터 가져오기 (Service)
+last_date = get_last_entry_date()
+
+# 2. 로직 처리 (Business Logic from Config)
+status_msg, msg_type = get_ledger_status_message(last_date)
+
+# 3. 화면 표시 (UI Rendering)
+if msg_type == "info":
+    st.info(status_msg)
+elif msg_type == "warning":
+    st.warning(status_msg)
+else:
+    st.error(status_msg)
+
+
 st.caption("💡 팁: 여러 건을 한 번에 입력해도 됩니다. (예: 점심 9000원, 커피 4500원)")
 
 input_type = st.radio("입력 방식", ["텍스트", "이미지 캡처"], horizontal=True, label_visibility="collapsed")

@@ -160,6 +160,21 @@ def delete_category_safe(category_name):
     finally:
         conn.close()
 
+# --- 가장 최근에 작성된 지출 내역 ---
+def get_last_entry_date():
+    """가장 최근에 작성된 지출 내역의 날짜를 반환합니다."""
+    conn = get_connection()
+    try:
+        # date 컬럼을 기준으로 내림차순 정렬하여 가장 최근 1건 추출
+        query = "SELECT date FROM expenses ORDER BY date DESC LIMIT 1"
+        df = pd.read_sql(query, conn)
+        if not df.empty:
+            return df.iloc[0]['date']
+        return None
+    except Exception:
+        return None
+    finally:
+        conn.close()
 
 # --- 지출 함수 ---
 

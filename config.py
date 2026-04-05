@@ -1,5 +1,6 @@
 # config.py
 from dotenv import load_dotenv
+from datetime import datetime
 import os
 load_dotenv()
 
@@ -152,7 +153,26 @@ def get_decile_summary(year, decile_name):
     total = needs_total + wants_total
     
     return total, needs_total, wants_total
+    
 
+def get_ledger_status_message(last_date_str):
+    """
+    마지막 작성일을 기반으로 상단 알림 메시지와 스타일(type)을 반환합니다.
+    관심사 분리: UI 렌더링 전 단계의 '비즈니스 로직'만 담당합니다.
+    """
+    if not last_date_str:
+        return "📊 아직 등록된 지출 내역이 없습니다. 첫 지출을 기록해보세요!", "warning"
+
+    last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+    today = datetime.now()
+    diff = (today - last_date).days
+    
+    if diff == 0:
+        return "✅ **오늘**까지 가계부가 업데이트되었습니다. 아주 잘하고 계세요!", "info"
+    elif diff <= 3:
+        return f"🔔 마지막 작성일은 **{last_date_str}**입니다. ({diff}일 전)", "info"
+    else:
+        return f"⚠️ 가계부가 **{diff}일째** 멈춰있습니다! ({last_date_str} 이후)", "error"
 
 # ==========================================
 # GEMINI Model
