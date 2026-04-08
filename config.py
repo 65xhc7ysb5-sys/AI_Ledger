@@ -15,10 +15,11 @@ TARGET_PRICE_LOW         = int(os.getenv("TARGET_PRICE_LOW",         800_000_000
 TARGET_PRICE_HIGH        = int(os.getenv("TARGET_PRICE_HIGH",        850_000_000))
 VARIABLE_BUDGET_LIMIT    = int(os.getenv("VARIABLE_BUDGET_LIMIT",    3_850_000))
 TARGET_DATE_YEAR         = int(os.getenv("TARGET_DATE_YEAR",         2029))
-TARGET_DATE_MONTH        = int(os.getenv("TARGET_DATE_YEAR",         2))
-MORTGAGE_RATE            = int(os.getenv("TARGET_DATE_YEAR",         2))
-MORTGAGE_YEARS           = int(os.getenv("TARGET_DATE_YEAR",         30))
-DSR_LIMIT                = int(os.getenv("TARGET_DATE_YEAR",         0.40))
+TARGET_DATE_MONTH        = int(os.getenv("TARGET_DATE_MONTH", 2))
+MORTGAGE_RATE            = float(os.getenv("MORTGAGE_RATE",   0.04))
+MORTGAGE_YEARS           = int(os.getenv("MORTGAGE_YEARS",    30))
+DSR_LIMIT                = float(os.getenv("DSR_LIMIT",       0.40))
+
 AREA_M2                  = int(os.getenv("TARGET_DATE_YEAR",         84))
 PYEONG                   = int(os.getenv("TARGET_DATE_YEAR",         AREA_M2 / 3.305))
 
