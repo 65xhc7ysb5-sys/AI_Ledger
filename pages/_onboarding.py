@@ -191,7 +191,7 @@ def _step_done():
     st.balloons()
     st.success("설정 완료! 이제 모든 페이지에 내 정보가 자동 반영됩니다.")
     if st.button("📊 대시보드로 이동", type="primary", use_container_width=True):
-        st.switch_page("pages/dashboard.py")
+        st.switch_page("pages/cashflow.py")
 
 # ── 수정 모드 ─────────────────────────────────────────────────
 def show_edit_mode():

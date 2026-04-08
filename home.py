@@ -5,7 +5,7 @@ from PIL import Image
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from database import init_db, insert_expense, load_data, get_budgets, get_categories, get_last_entry_date  # DB 호출 함수
+from database import init_db, insert_expense, load_data, get_budgets, get_categories, get_last_entry_date, get_setting  # DB 호출 함수
 from config import get_ledger_status_message 
 
 # [수정] google.api_core 의존성을 제거하고, tenacity만 사용합니다.
@@ -13,8 +13,29 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 st.set_page_config(page_title="AI 가계부 - 홈", page_icon="🏠")
 
-# 앱 시작 시 DB 초기화
+pg = st.navigation(
+    {
+        "가계부": [
+            st.Page("home.py",                   title="📝 지출 입력",          default=True),
+            st.Page("pages/dashboard.py",        title="📊 소비 분석"),
+            st.Page("pages/fixed_expenses.py",   title="📌 고정 지출"),
+            st.Page("pages/export_to_claude.py", title="📤 내보내기"),
+        ],
+        "재정 관리": [
+            st.Page("pages/cashflow.py",         title="💰 자기자본 시뮬레이터"),
+            st.Page("pages/budget.py",           title="🎯 예산 설계"),
+            st.Page("pages/real_estate.py",      title="🏠 부동산 전략"),
+        ],
+        "설정": [
+            st.Page("pages/_onboarding.py",      title="⚙️ 프로필 설정"),
+        ],
+    }
+)
+
+# 앱 시작 시 DB 초기화 (pg.run() 전 — 모든 페이지에서 실행)
 init_db()
+
+pg.run()
 
 # API 키 설정
 try:
@@ -55,6 +76,16 @@ def generate_content_with_retry(model, contents):
     )
 
 # --- 2. 상단 요약 (HUD) ---
+
+# ── 온보딩 완료 여부 체크 ──────────────────────────────────────
+if get_setting("profile_completed") != "1":
+    st.warning(
+        "⚙️ 프로필 설정을 완료해야 정확한 시뮬레이션이 가능합니다.",
+        icon="⚠️",
+    )
+    if st.button("설정하기 →", type="primary"):
+        st.switch_page("pages/_onboarding.py")
+    st.divider()
 
 st.title("🏠 나의 자산 현황")
 today = datetime.now()

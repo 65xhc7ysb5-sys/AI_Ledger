@@ -1,51 +1,29 @@
-# pages/budget.py
-# AI Ledger — 맞춤형 예산 설계 & AI 진단 (v2.1)
-# -------------------------------------------------------
-# 변경 사항 (v2.1):
-#   1. [Tab1] "이 기준으로 예산 자동 세팅" → user_total_budget 연동 (session_state)
-#   2. [Tab1] 경고 메시지 컬럼 정렬 수정 (전체 너비 단일 컬럼으로 변경)
-#   3. [Tab1/Tab3] 모든 표 Sort Ascending(카테고리명 오름차순) 통일
-#   4. [Tab2] 중복 시각화 제거 → 예산 대비 실지출 % 단일 바 차트로 통합
-#   5. [Tab3] Gemini SDK ImportError 디버깅 — 신구 SDK 모두 지원
-# -------------------------------------------------------
-
+# ── 변경 후 ──────────────────────────────────────────
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import sys
 import os
 
-# Import 상수 
+# sys.path를 먼저 추가해서 import 순서 문제 제거
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from config import (
+    TARGET_EQUITY, TARGET_PURCHASE_PRICE, TARGET_AREA_PYEONG,
+    PRICE_PER_PYEONG, RETIREMENT_YEAR, CURRENT_AGE,
+    ANNUAL_RETURN_RATE, TARGET_DATE_YEAR, TARGET_DATE_MONTH,
+    VARIABLE_BUDGET_LIMIT, DEFAULT_CATEGORIES, INCOME_DECILES_BUDGET,
+    MEDIAN_INCOME_3PERSON, GEMINI_MODEL_VER, get_decile_summary,
+)
 from database import (
     load_data, save_budget, get_budgets, delete_budget,
     get_available_months, save_setting, get_setting,
     clear_all_budgets, get_categories,
 )
 
+# ── _s() 헬퍼 및 상수 오버라이드 ──────────────────────
 def _s(key, default):
     return type(default)(get_setting(key) or default)
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from config import (
-    DEFAULT_CATEGORIES,
-    INCOME_DECILES_BUDGET,
-    MEDIAN_INCOME_3PERSON,
-    GEMINI_MODEL_VER,
-    VARIABLE_BUDGET_LIMIT,
-    get_decile_summary,
-)
-from database import (
-    load_data,
-    save_budget,
-    get_budgets,
-    delete_budget,
-    get_available_months,
-    save_setting,
-    get_setting,
-    clear_all_budgets,   # ★ 예산 전체 초기화
-    get_categories,      # ★ 유효 카테고리 목록 (재정규화용)
-)
-
 
 # ── Gemini SDK: 신구 버전 모두 지원 ──────────────────
 # google-generativeai (구) : import google.generativeai as genai
