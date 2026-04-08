@@ -10,7 +10,7 @@ from database import load_data, get_available_months
 from core.finance import calculate_fv as _sv_fv, calculate_asset_fv as _as_fv, calculate_max_loan
 from components.formatters import format_korean
 
-from config import TARGET_DATE_YEAR, TARGET_DATE_MONTH, TARGET_EQUITY, CURRENT_JEONSE_DEPOSIT, MONTHLY_SAVING_TARGET
+from config import TARGET_DATE_YEAR, TARGET_DATE_MONTH, TARGET_EQUITY, MONTHLY_SAVING_TARGET
 from database import get_setting
 
 def _s(key, default):
@@ -113,12 +113,14 @@ with col_r:
         "현재 청약저축 (원)", min_value=0, value=_s("asset_subscription", 25_000_000), step=10_000, format="%d"
     )
     st.caption(f"= {format_korean(current_savings_deposit)}")
-    st.caption(f"전세보증금 회수 잔여: **{CURRENT_JEONSE_DEPOSIT:,}원** (고정)")
+    
+    jeonse_recovery = _s("asset_jeonse_recovery", 260_000_000)
+    st.caption(f"전세보증금 회수 잔여: **{jeonse_recovery:,}원** (고정)")
 
 # 계산
 sv_fv = int(_sv_fv(monthly_saving, annual_return, remaining_months))
 as_fv = int(_as_fv(current_investment, annual_return, remaining_months))
-total_equity  = sv_fv + as_fv + current_savings_deposit + CURRENT_JEONSE_DEPOSIT
+total_equity  = sv_fv + as_fv + current_savings_deposit + jeonse_recovery
 progress_pct  = min(1.0, total_equity / TARGET_EQUITY)
 
 st.subheader(f"예상 자기자본: {total_equity:,}원")
@@ -133,7 +135,7 @@ else:
 # 연도별 적립 추이 차트
 chart_df = build_yearly_chart(
     monthly_saving, current_investment, annual_return,
-    current_savings_deposit, CURRENT_JEONSE_DEPOSIT
+    current_savings_deposit, jeonse_recovery
 )
 if not chart_df.empty:
     fig = go.Figure()
