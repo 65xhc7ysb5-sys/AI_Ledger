@@ -17,12 +17,29 @@ from components.formatters import format_korean
 from config import (
     MONTHLY_INCOME, CURRENT_INVESTMENT, CURRENT_JEONSE_DEPOSIT,
     CURRENT_SAVINGS_DEPOSIT, MONTHLY_SAVING_TARGET, TARGET_EQUITY,
-    TARGET_PRICE_LOW, TARGET_PRICE_HIGH, VARIABLE_BUDGET_LIMIT, 
+    TARGET_PRICE_LOW, TARGET_PRICE_HIGH, VARIABLE_BUDGET_LIMIT,
     TARGET_DATE_YEAR, TARGET_DATE_MONTH, MORTGAGE_RATE, MORTGAGE_YEARS,
     DSR_LIMIT, AREA_M2, PYEONG
 )
+from database import get_connection, load_data, get_available_months, get_budgets, get_setting
 
-VARIABLE_BUDGET_LIMIT = 3_500_000  # 월 변동지출 한도 (주담대 가처분 계산용)
+def _s(key, default):
+    return type(default)(get_setting(key) or default)
+
+VARIABLE_BUDGET_LIMIT = 3_500_000
+
+# 상수 블록 오버라이드 — ──
+MONTHLY_INCOME          = _s("income_monthly",        MONTHLY_INCOME)
+CURRENT_INVESTMENT      = _s("asset_investment",      CURRENT_INVESTMENT)
+CURRENT_JEONSE_DEPOSIT  = _s("asset_jeonse_recovery", CURRENT_JEONSE_DEPOSIT)
+CURRENT_SAVINGS_DEPOSIT = _s("asset_subscription",    CURRENT_SAVINGS_DEPOSIT)
+MONTHLY_SAVING_TARGET   = _s("income_monthly",        MONTHLY_INCOME) // 4
+TARGET_EQUITY           = _s("goal_equity",           TARGET_EQUITY)
+TARGET_PRICE_HIGH       = _s("goal_purchase_price",   TARGET_PRICE_HIGH)
+TARGET_DATE_YEAR        = _s("goal_date_year",        TARGET_DATE_YEAR)
+TARGET_DATE_MONTH       = _s("goal_date_month",       TARGET_DATE_MONTH)
+MORTGAGE_RATE           = _s("mortgage_rate",         0.04)
+MORTGAGE_YEARS          = _s("mortgage_years",        30)
 
 # ── 입지 스코어카드 데이터 ────────────────────────────────────
 CANDIDATE_AREAS = {
@@ -1225,7 +1242,7 @@ with st.expander("DSR 시뮬레이터 (매수 구매력 계산)"):
     with d_col1:
         dsr_income = st.number_input(
             "예상 가구 월소득 (원)",
-            min_value=0, value=10_800_000, step=10_000, format="%d",
+            min_value=0, value=_s("income_monthly", 10_800_000), step=10_000, format="%d",
             key="dsr_income"
         )
         st.caption(f"= {format_korean(dsr_income)}")

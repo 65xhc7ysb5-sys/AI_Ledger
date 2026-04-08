@@ -16,12 +16,14 @@ import sys
 import os
 
 # Import 상수 
-from config import (
-    TARGET_EQUITY, TARGET_PURCHASE_PRICE, TARGET_AREA_PYEONG,
-    PRICE_PER_PYEONG, RETIREMENT_YEAR, CURRENT_AGE,
-    ANNUAL_RETURN_RATE, TARGET_DATE_YEAR, TARGET_DATE_MONTH,
-    VARIABLE_BUDGET_LIMIT
+from database import (
+    load_data, save_budget, get_budgets, delete_budget,
+    get_available_months, save_setting, get_setting,
+    clear_all_budgets, get_categories,
 )
+
+def _s(key, default):
+    return type(default)(get_setting(key) or default)
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config import (
@@ -73,6 +75,11 @@ if not GEMINI_AVAILABLE:
 #   (통계청 소득 분위 비중을 베이스로,
 #    문화/교육 ↑ 생활소비 ↑ 의료/미용 ↓ 로 조정)
 # ══════════════════════════════════════════════════════
+
+TARGET_EQUITY          = _s("goal_equity",          TARGET_EQUITY)
+TARGET_PURCHASE_PRICE  = _s("goal_purchase_price",  TARGET_PURCHASE_PRICE)
+RETIREMENT_YEAR        = _s("goal_retirement_year", RETIREMENT_YEAR)
+
 FAMILY_WEIGHTS = {
     # --- 필수소비 (Needs) ---
     "공과금/주거":   0.08,   # 고정 비용

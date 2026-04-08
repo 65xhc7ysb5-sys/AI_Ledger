@@ -11,7 +11,10 @@ from core.finance import calculate_fv as _sv_fv, calculate_asset_fv as _as_fv, c
 from components.formatters import format_korean
 
 from config import TARGET_DATE_YEAR, TARGET_DATE_MONTH, TARGET_EQUITY, CURRENT_JEONSE_DEPOSIT, MONTHLY_SAVING_TARGET
+from database import get_setting
 
+def _s(key, default):
+    return type(default)(get_setting(key) or default)
 
 
 # ── 상수 ────────────────────────────────────────────────────────
@@ -65,7 +68,7 @@ st.header("Section A — 이번 달 현금흐름")
 monthly_income = st.sidebar.number_input(
     "이번 달 실수령 합산 소득 (원)",
     min_value=0,
-    value=10_800_000,
+    value=_s("income_monthly", 10_800_000),
     step=10_000,
     format="%d",
 )
@@ -103,11 +106,11 @@ with col_l:
 
 with col_r:
     current_investment = st.number_input(
-        "현재 보유 투자자산 (원)", min_value=0, value=50_000_000, step=10_000, format="%d"
+        "현재 보유 투자자산 (원)", min_value=0, value=_s("asset_investment", 50_000_000), step=10_000, format="%d"
     )
     st.caption(f"= {format_korean(current_investment)}")
     current_savings_deposit = st.number_input(
-        "현재 청약저축 (원)", min_value=0, value=25_000_000, step=10_000, format="%d"
+        "현재 청약저축 (원)", min_value=0, value=_s("asset_subscription", 25_000_000), step=10_000, format="%d"
     )
     st.caption(f"= {format_korean(current_savings_deposit)}")
     st.caption(f"전세보증금 회수 잔여: **{CURRENT_JEONSE_DEPOSIT:,}원** (고정)")
