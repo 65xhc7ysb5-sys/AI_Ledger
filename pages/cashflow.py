@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, date
 
-from database import load_data, get_available_months
+from database import load_data, get_available_months, get_budgets, get_fixed_expenses
 from core.finance import calculate_fv as _sv_fv, calculate_asset_fv as _as_fv, calculate_max_loan
 from components.formatters import format_korean
 
@@ -86,74 +86,107 @@ col2.metric("총 지출", f"{total_expense:,}원")
 st.divider()
 
 # ── Section B: 2029년 2월 자기자본 적립 시뮬레이터 ──────────────
+# 변경 후
 st.header("Section B — 2029년 2월 자기자본 적립 시뮬레이터")
 
 remaining_months = months_remaining()
 st.caption(f"오늘({date.today()}) 기준 목표까지 **{remaining_months}개월** 남음")
 
-col_l, col_r = st.columns(2)
-with col_l:
-    monthly_saving = st.slider(
-        "월 저축 목표액 (만원)",
-        min_value=200, max_value=500, value=325, step=5
-    ) * 10_000
-    st.caption(f"= {format_korean(monthly_saving)}")
-
-    annual_return = st.slider(
-        "예상 투자 연수익률 (%)",
-        min_value=0.0, max_value=8.0, value=3.0, step=0.5
-    ) / 100
-
-with col_r:
-    current_investment = st.number_input(
-        "현재 보유 투자자산 (원)", min_value=0, value=_s("asset_investment", 50_000_000), step=10_000, format="%d"
-    )
-    st.caption(f"= {format_korean(current_investment)}")
-    current_savings_deposit = st.number_input(
-        "현재 청약저축 (원)", min_value=0, value=_s("asset_subscription", 25_000_000), step=10_000, format="%d"
-    )
-    st.caption(f"= {format_korean(current_savings_deposit)}")
-    
-    jeonse_recovery = _s("asset_jeonse_recovery", 260_000_000)
-    st.caption(f"전세보증금 회수 잔여: **{jeonse_recovery:,}원** (고정)")
-
-# 계산
-sv_fv = int(_sv_fv(monthly_saving, annual_return, remaining_months))
-as_fv = int(_as_fv(current_investment, annual_return, remaining_months))
-total_equity  = sv_fv + as_fv + current_savings_deposit + jeonse_recovery
-progress_pct  = min(1.0, total_equity / TARGET_EQUITY)
-
-st.subheader(f"예상 자기자본: {total_equity:,}원")
-st.progress(progress_pct, text=f"목표 {TARGET_EQUITY:,}원 대비 {progress_pct*100:.1f}%")
-
-if total_equity >= TARGET_EQUITY:
-    st.success(f"목표 자기자본 {TARGET_EQUITY:,}원 달성 가능")
-else:
-    gap = TARGET_EQUITY - total_equity
-    st.warning(f"목표까지 {gap:,}원 부족")
-
-# 연도별 적립 추이 차트
-chart_df = build_yearly_chart(
-    monthly_saving, current_investment, annual_return,
-    current_savings_deposit, jeonse_recovery
+# ── 저축 계산 모드 탭 ──────────────────────────────────
+tab_prev, tab_budget, tab_manual = st.tabs(
+    ["📊 지난달 역산 (기본값)", "🎯 예산 기반", "✏️ 직접 입력 (시나리오 탐색)"]
 )
-if not chart_df.empty:
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=chart_df["date"],
-        y=chart_df["총 자기자본"],
-        mode="lines+markers+text",
-        text=[f"{v/1e8:.2f}억" for v in chart_df["총 자기자본"]],
-        textposition="top center",
-        name="총 자기자본",
-    ))
-    fig.add_hline(y=TARGET_EQUITY, line_dash="dash", line_color="red",
-                  annotation_text=f"목표 {TARGET_EQUITY/1e8:.1f}억")
-    fig.update_layout(
-        xaxis_title="시점",
-        yaxis_title="자기자본 (원)",
-        yaxis_tickformat=",",
-        height=350,
-        margin=dict(t=30, b=30),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+
+with tab_prev:
+    st.caption("가장 최근 확정 지출 실적을 기반으로 저축 가능액을 역산합니다.")
+    prev_month_date = date.today().replace(day=1)
+    if prev_month_date.month == 1:
+        prev_month_date = prev_month_date.replace(year=prev_month_date.year - 1, month=12)
+    else:
+        prev_month_date = prev_month_date.replace(month=prev_month_date.month - 1)
+    prev_month_str = prev_month_date.strftime("%Y-%m")
+
+    prev_df = load_data(prev_month_str)
+    prev_variable  = int(prev_df["amount"].sum()) if not prev_df.empty else 0
+
+    fixed_df = get_fixed_expenses()
+    if fixed_df.empty:
+        prev_fixed    = 0
+        prev_savings_type = 0
+    else:
+        # type 컬럼 존재 여부 방어 처리
+        if "type" in fixed_df.columns:
+            prev_fixed        = int(fixed_df[fixed_df["type"] != "저축성지출"]["amount"].sum())
+            prev_savings_type = int(fixed_df[fixed_df["type"] == "저축성지출"]["amount"].sum())
+        else:
+            prev_fixed        = int(fixed_df["amount"].sum())
+            prev_savings_type = 0
+
+    prev_calculated = monthly_income - prev_variable - prev_fixed + prev_savings_type
+
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    mc1.metric("변동 지출", f"{prev_variable:,}원")
+    mc2.metric("고정 지출", f"{prev_fixed:,}원")
+    mc3.metric("저축성 지출", f"{prev_savings_type:,}원", help="DC, IRP, 보험 등 — 지출이지만 자산 형성 항목")
+    mc4.metric(f"추정 월 저축", f"{prev_calculated:,}원",
+               delta=f"{prev_calculated - MONTHLY_SAVING_TARGET:+,}원 (목표 대비)" if prev_calculated != MONTHLY_SAVING_TARGET else "목표 일치")
+    st.caption(f"📅 **{prev_month_str} 실적** 기준 | 소득 {monthly_income:,}원 − 변동 {prev_variable:,}원 − 고정 {prev_fixed:,}원 + 저축성 {prev_savings_type:,}원")
+    monthly_saving_prev = max(prev_calculated, 0)
+
+with tab_budget:
+    st.caption("설정된 예산 합계를 기준으로 저축 가능액을 계산합니다. (계획값)")
+    budgets_df_cf = get_budgets()
+    if budgets_df_cf.empty:
+        st.warning("설정된 예산이 없습니다. [예산 설계] 페이지에서 먼저 예산을 입력해 주세요.")
+        budget_total = 0
+    else:
+        budget_total = int(budgets_df_cf["amount"].sum())
+        st.metric("예산 합계", f"{budget_total:,}원")
+
+    budget_calculated = monthly_income - budget_total
+    st.metric("예산 기준 월 저축 예상액", f"{budget_calculated:,}원",
+              delta=f"{budget_calculated - MONTHLY_SAVING_TARGET:+,}원 (목표 대비)" if budget_calculated != MONTHLY_SAVING_TARGET else "목표 일치")
+    st.caption(f"소득 {monthly_income:,}원 − 예산 {budget_total:,}원")
+    monthly_saving_budget = max(budget_calculated, 0)
+
+with tab_manual:
+    st.caption("슬라이더로 직접 저축액을 설정하고 시나리오를 탐색합니다.")
+    monthly_saving_manual = st.slider(
+        "월 저축 목표액 (만원)",
+        min_value=0, max_value=700, value=325, step=5
+    ) * 10_000
+    st.caption(f"= {format_korean(monthly_saving_manual)}")
+
+# ── 탭 선택 결과 → monthly_saving 결정 ────────────────
+# session_state로 마지막 활성 탭 추적
+# Streamlit 탭은 활성 탭 인덱스를 직접 노출하지 않으므로
+# 각 탭 내부에서 session_state에 값을 기록하는 방식으로 처리
+if "cf_saving_mode" not in st.session_state:
+    st.session_state["cf_saving_mode"] = "prev"
+
+col_mode = st.columns(3)
+with col_mode[0]:
+    if st.button("📊 지난달 역산 적용", use_container_width=True):
+        st.session_state["cf_saving_mode"] = "prev"
+with col_mode[1]:
+    if st.button("🎯 예산 기반 적용", use_container_width=True):
+        st.session_state["cf_saving_mode"] = "budget"
+with col_mode[2]:
+    if st.button("✏️ 직접 입력 적용", use_container_width=True):
+        st.session_state["cf_saving_mode"] = "manual"
+
+mode = st.session_state["cf_saving_mode"]
+if mode == "prev":
+    monthly_saving = monthly_saving_prev
+    st.info(f"📊 **지난달 역산** 모드 적용 중 — 월 저축 **{monthly_saving:,}원**")
+elif mode == "budget":
+    monthly_saving = monthly_saving_budget
+    st.info(f"🎯 **예산 기반** 모드 적용 중 — 월 저축 **{monthly_saving:,}원**")
+else:
+    monthly_saving = monthly_saving_manual
+    st.info(f"✏️ **직접 입력** 모드 적용 중 — 월 저축 **{monthly_saving:,}원**")
+
+annual_return = st.slider(
+    "예상 투자 연수익률 (%)",
+    min_value=0.0, max_value=8.0, value=3.0, step=0.5
+) / 100
