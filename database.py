@@ -13,7 +13,9 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# After
 def init_db():
+    """테이블 초기 생성 및 마이그레이션 실행. 앱 시작 시 1회 호출."""
     conn = get_connection()
     c = conn.cursor()
 
@@ -55,12 +57,6 @@ def init_db():
         )
     ''')
 
-    # [마이그레이션] 기존 DB에 type 컬럼이 없다면 추가
-    try:
-        c.execute("ALTER TABLE categories ADD COLUMN type TEXT")
-    except sqlite3.OperationalError:
-        pass  # 이미 존재하면 넘어감
-
     c.execute('''
         CREATE TABLE IF NOT EXISTS app_settings (
             key TEXT PRIMARY KEY,
@@ -68,10 +64,79 @@ def init_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
+    _bootstrap_migrations()
+    run_migrations()
     seed_categories()
+
+
+# ── 마이그레이션 정의 ─────────────────────────────────────────────
+# 새 마이그레이션 추가 시 MIGRATIONS dict에 다음 버전 번호로 한 줄 추가.
+# SQL은 반드시 멱등성을 보장하는 DDL만 사용 (ALTER TABLE, CREATE INDEX 등).
+MIGRATIONS = {
+    1: "ALTER TABLE categories ADD COLUMN type TEXT",
+    2: "ALTER TABLE fixed_expenses ADD COLUMN type TEXT DEFAULT '지출'",
+}
+
+
+def _bootstrap_migrations():
+    """
+    schema_migrations 테이블이 비어 있을 때 기존 DB 상태를 감지해
+    이미 적용된 마이그레이션을 건너뜁니다.
+
+    감지 기준:
+    - categories.type 컬럼 존재 → version 1 이미 적용
+    - 이후 버전은 run_migrations()가 정상 처리
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COUNT(*) FROM schema_migrations")
+        if c.fetchone()[0] > 0:
+            return  # 이미 부트스트랩 완료
+
+        # categories.type 컬럼 존재 여부로 현재 버전 감지
+        c.execute("PRAGMA table_info(categories)")
+        cols = [row[1] for row in c.fetchall()]
+        if "type" in cols:
+            c.execute(
+                "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (1,)
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def run_migrations():
+    """
+    MIGRATIONS dict를 순회하며 미적용 버전을 순서대로 실행합니다.
+    앱 시작 시 init_db()에서 자동 호출됩니다.
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+        current_version = c.fetchone()[0]
+
+        for version, sql in sorted(MIGRATIONS.items()):
+            if version <= current_version:
+                continue
+            c.execute(sql)
+            c.execute(
+                "INSERT INTO schema_migrations (version) VALUES (?)", (version,)
+            )
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def seed_categories():
@@ -323,13 +388,13 @@ def clear_all_budgets():
 
 # --- 고정 지출 함수 ---
 
-def save_fixed_expense(item, amount, category, payment_day, spender="공동"):
+def save_fixed_expense(item, amount, category, payment_day, spender="공동", type="지출"):
     conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT INTO fixed_expenses (item, amount, category, spender, payment_day) VALUES (?, ?, ?, ?, ?)",
-            (item, amount, category, spender, payment_day),
+            "INSERT INTO fixed_expenses (item, amount, category, spender, payment_day, type) VALUES (?, ?, ?, ?, ?, ?)",
+            (item, amount, category, spender, payment_day, type),
         )
         conn.commit()
         return True
