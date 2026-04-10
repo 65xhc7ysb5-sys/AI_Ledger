@@ -3,8 +3,6 @@ import pandas as pd
 from datetime import datetime
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config import DEFAULT_CATEGORIES
 
 # 상위 폴더 모듈 로드
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -12,6 +10,7 @@ from database import (
     save_fixed_expense, get_fixed_expenses, delete_fixed_expense, 
     insert_expense, load_data
 )
+from config import DEFAULT_CATEGORIES
 
 st.set_page_config(page_title="고정 지출 관리", page_icon="🔄")
 
@@ -46,11 +45,13 @@ else:
         
         # 카드 디자인
         with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([1, 3, 2, 2])
+            c1, c2, c3, c4, c5 = st.columns([1, 3, 2, 1, 2])
             c1.write(f"**{row['payment_day']}일**")
             c2.write(f"**{row['item']}**")
             c3.write(f"{row['amount']:,}원")
-            c4.write(f"{status_icon} {status_text}")
+            item_type = row.get("type", "지출") if hasattr(row, "get") else (row["type"] if "type" in row.index else "지출")
+            c4.markdown("💰 저축" if item_type == "저축성지출" else "💸 지출")
+            c5.write(f"{status_icon} {status_text}")
         
         if not is_paid:
             # 기록할 데이터 미리 만들어두기
@@ -82,18 +83,26 @@ col1, col2 = st.columns([1, 1])
 
 # [왼쪽] 등록 폼
 with col1:
+    # 변경 후
     with st.form("add_fixed_form", clear_on_submit=True):
         st.write("**새 항목 추가**")
         item_name = st.text_input("항목명 (예: 넷플릭스)")
         amount = st.number_input("금액", min_value=0, step=1000)
-        
+
+        expense_type = st.radio(
+            "유형",
+            ["지출", "저축성지출"],
+            horizontal=True,
+            help="저축성 지출: DC 퇴직연금, IRP, 개인연금, 청약저축 자동이체, 보험료(종신·실손·암보험), 자녀 학자금 적립",
+        )
+
         category = st.selectbox("카테고리", DEFAULT_CATEGORIES)
-        
+
         day = st.number_input("매월 결제일 (1~31)", min_value=1, max_value=31, value=1)
-        
+
         if st.form_submit_button("등록"):
             if item_name and amount > 0:
-                save_fixed_expense(item_name, amount, category, day)
+                save_fixed_expense(item_name, amount, category, day, type=expense_type)
                 st.success(f"'{item_name}' 등록 완료!")
                 st.rerun()
             else:
