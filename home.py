@@ -250,6 +250,7 @@ pg = st.navigation(
             st.Page("pages/cashflow.py",         title="💰 자기자본 시뮬레이터"),
             st.Page("pages/budget.py",           title="🎯 예산 설계"),
             st.Page("pages/real_estate.py",      title="🏠 부동산 전략"),
+            st.Page("pages/monthly_review.py", title="월간 리뷰", icon="📋")
         ],
         "설정": [
             st.Page("pages/_onboarding.py",      title="⚙️ 프로필 설정"),
