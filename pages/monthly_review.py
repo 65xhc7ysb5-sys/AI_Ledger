@@ -97,8 +97,8 @@ else:
     fixed_expense_sum = int(fixed_df["amount"].sum()) if not fixed_df.empty else 0
     savings_type_sum  = 0
 
-# 실저축 = 소득 - 변동지출 - 고정지출 + 저축성지출 (cashflow.py 동일 공식)
-actual_saving = monthly_income - total_expense - fixed_expense_sum + savings_type_sum
+# 실저축 = 소득 - 변동지출 - 순고정지출 - 저축성지출
+actual_saving = monthly_income - total_expense - fixed_expense_sum - savings_type_sum
 saving_target = _s("monthly_saving_target", MONTHLY_SAVING_TARGET)
 saving_delta  = actual_saving - saving_target
 saving_delta_pct = saving_delta / saving_target * 100 if saving_target > 0 else 0

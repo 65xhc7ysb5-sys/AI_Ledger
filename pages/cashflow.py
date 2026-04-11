@@ -93,6 +93,17 @@ remaining_months = months_remaining()
 st.caption(f"오늘({date.today()}) 기준 목표까지 **{remaining_months}개월** 남음")
 
 # ── 저축 계산 모드 탭 ──────────────────────────────────
+fixed_df = get_fixed_expenses()
+if fixed_df.empty:
+    fixed_expense_sum = 0
+    savings_type_sum  = 0
+elif "type" in fixed_df.columns:
+    fixed_expense_sum = int(fixed_df[fixed_df["type"] != "저축성지출"]["amount"].sum())
+    savings_type_sum  = int(fixed_df[fixed_df["type"] == "저축성지출"]["amount"].sum())
+else:
+    fixed_expense_sum = int(fixed_df["amount"].sum())
+    savings_type_sum  = 0
+
 tab_prev, tab_budget, tab_manual = st.tabs(
     ["📊 지난달 역산 (기본값)", "🎯 예산 기반", "✏️ 직접 입력 (시나리오 탐색)"]
 )
@@ -100,37 +111,54 @@ tab_prev, tab_budget, tab_manual = st.tabs(
 with tab_prev:
     st.caption("가장 최근 확정 지출 실적을 기반으로 저축 가능액을 역산합니다.")
     prev_month_date = date.today().replace(day=1)
+
     if prev_month_date.month == 1:
         prev_month_date = prev_month_date.replace(year=prev_month_date.year - 1, month=12)
     else:
         prev_month_date = prev_month_date.replace(month=prev_month_date.month - 1)
     prev_month_str = prev_month_date.strftime("%Y-%m")
 
+    # ── 변경 후 ──
     prev_df = load_data(prev_month_str)
-    prev_variable  = int(prev_df["amount"].sum()) if not prev_df.empty else 0
+    prev_variable = int(prev_df["amount"].sum()) if not prev_df.empty else 0
 
-    fixed_df = get_fixed_expenses()
-    if fixed_df.empty:
-        prev_fixed    = 0
-        prev_savings_type = 0
-    else:
-        # type 컬럼 존재 여부 방어 처리
-        if "type" in fixed_df.columns:
-            prev_fixed        = int(fixed_df[fixed_df["type"] != "저축성지출"]["amount"].sum())
-            prev_savings_type = int(fixed_df[fixed_df["type"] == "저축성지출"]["amount"].sum())
-        else:
-            prev_fixed        = int(fixed_df["amount"].sum())
-            prev_savings_type = 0
+    # fixed_df는 탭 밖에서 이미 로드 — prev_fixed, savings_type_sum 재사용
+    prev_fixed        = fixed_expense_sum
+    prev_savings_type = savings_type_sum
 
-    prev_calculated = monthly_income - prev_variable - prev_fixed + prev_savings_type
+    # 월별 소득 입력 (session_state 기반, DB 저장 없음 — 데이터 누적 방지)
+    prev_income_key = f"income_{prev_month_str}"
+    if prev_income_key not in st.session_state:
+        st.session_state[prev_income_key] = _s("income_monthly", 10_800_000)
+    prev_income = st.number_input(
+        f"{prev_month_str} 실수령 소득 (원)",
+        min_value=0,
+        value=st.session_state[prev_income_key],
+        step=100_000,
+        format="%d",
+        key=f"ni_{prev_income_key}",
+        help="육아휴직 등 소득 변동이 있으면 해당 월 실수령액으로 수정하세요.",
+    )
+    st.session_state[prev_income_key] = prev_income
+
+    # 공식: 소득 - 변동지출 - 순고정지출 - 저축성지출
+    prev_calculated = prev_income - prev_variable - prev_fixed - prev_savings_type
 
     mc1, mc2, mc3, mc4 = st.columns(4)
-    mc1.metric("변동 지출", f"{prev_variable:,}원")
-    mc2.metric("고정 지출", f"{prev_fixed:,}원")
-    mc3.metric("저축성 지출", f"{prev_savings_type:,}원", help="DC, IRP, 보험 등 — 지출이지만 자산 형성 항목")
-    mc4.metric(f"추정 월 저축", f"{prev_calculated:,}원",
-               delta=f"{prev_calculated - MONTHLY_SAVING_TARGET:+,}원 (목표 대비)" if prev_calculated != MONTHLY_SAVING_TARGET else "목표 일치")
-    st.caption(f"📅 **{prev_month_str} 실적** 기준 | 소득 {monthly_income:,}원 − 변동 {prev_variable:,}원 − 고정 {prev_fixed:,}원 + 저축성 {prev_savings_type:,}원")
+    mc1.metric("변동 지출",   f"{prev_variable:,}원")
+    mc2.metric("순고정 지출", f"{prev_fixed:,}원",        help="저축성 지출 제외한 고정 지출")
+    mc3.metric("저축성 지출", f"{prev_savings_type:,}원", help="DC, IRP, 보험 등 — 별도 자산 형성, 저축에서 차감")
+    mc4.metric(
+        "추정 월 저축",
+        f"{prev_calculated:,}원",
+        delta=f"{prev_calculated - MONTHLY_SAVING_TARGET:+,}원 (목표 대비)"
+              if prev_calculated != MONTHLY_SAVING_TARGET else "목표 일치",
+    )
+    st.caption(
+        f"📅 **{prev_month_str} 실적** 기준 | "
+        f"소득 {prev_income:,}원 − 변동 {prev_variable:,}원 "
+        f"− 순고정 {prev_fixed:,}원 − 저축성 {prev_savings_type:,}원"
+    )
     monthly_saving_prev = max(prev_calculated, 0)
 
 with tab_budget:
@@ -142,11 +170,22 @@ with tab_budget:
     else:
         budget_total = int(budgets_df_cf["amount"].sum())
         st.metric("예산 합계", f"{budget_total:,}원")
-
-    budget_calculated = monthly_income - budget_total
-    st.metric("예산 기준 월 저축 예상액", f"{budget_calculated:,}원",
-              delta=f"{budget_calculated - MONTHLY_SAVING_TARGET:+,}원 (목표 대비)" if budget_calculated != MONTHLY_SAVING_TARGET else "목표 일치")
-    st.caption(f"소득 {monthly_income:,}원 − 예산 {budget_total:,}원")
+    
+    # 공식: 소득 - 예산합계 - 순고정지출 - 저축성지출
+    budget_calculated = monthly_income - budget_total - fixed_expense_sum - savings_type_sum
+    bc1, bc2 = st.columns(2)
+    bc1.metric("순고정 지출", f"{fixed_expense_sum:,}원", help="저축성 지출 제외")
+    bc2.metric("저축성 지출", f"{savings_type_sum:,}원",  help="DC, IRP, 보험 등")
+    st.metric(
+        "예산 기준 월 저축 예상액",
+        f"{budget_calculated:,}원",
+        delta=f"{budget_calculated - MONTHLY_SAVING_TARGET:+,}원 (목표 대비)"
+              if budget_calculated != MONTHLY_SAVING_TARGET else "목표 일치",
+    )
+    st.caption(
+        f"소득 {monthly_income:,}원 − 예산 {budget_total:,}원 "
+        f"− 순고정 {fixed_expense_sum:,}원 − 저축성 {savings_type_sum:,}원"
+    )
     monthly_saving_budget = max(budget_calculated, 0)
 
 with tab_manual:
