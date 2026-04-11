@@ -53,9 +53,9 @@ else:
             c4.markdown("💰 저축" if item_type == "저축성지출" else "💸 지출")
             c5.write(f"{status_icon} {status_text}")
         
-        if not is_paid:
-            # 기록할 데이터 미리 만들어두기
-            # 날짜는 '이번 달'의 해당 '결제일'로 설정
+        if not is_paid and item_type != "저축성지출":
+            # 저축성지출은 expenses 테이블에 절대 기록하지 않음
+            # (cashflow 계산용으로만 존재)
             due_date = f"{current_month_str}-{str(row['payment_day']).zfill(2)}"
             pending_expenses.append({
                 "date": due_date,
