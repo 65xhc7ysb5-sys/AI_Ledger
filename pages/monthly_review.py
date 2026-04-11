@@ -5,9 +5,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
 from google import genai
 from datetime import datetime, date
-
 from database import (
-    load_data, get_budgets, get_fixed_expenses, get_setting
+    load_data, get_budgets, get_fixed_expenses, get_setting, get_monthly_income, save_monthly_income
 )
 from core.finance import calculate_fv as _sv_fv, calculate_asset_fv as _as_fv
 from components.formatters import format_korean
@@ -78,14 +77,18 @@ total_expense = int(df["amount"].sum())
 
 # ── 소득 (사이드바) ──────────────────────────────────────────────
 
+_default_income = _s("income_monthly", 10_000_000)
 monthly_income = st.sidebar.number_input(
-    "이달 실수령 합산 소득 (원)",
+    f"{selected_month} 실수령 합산 소득 (원)",
     min_value=0,
-    value=_s("income_monthly", 10_800_000),
-    step=10_000,
+    value=get_monthly_income(selected_month, _default_income),
+    step=100_000,
     format="%d",
 )
 st.sidebar.caption(f"= {format_korean(monthly_income)}")
+if st.sidebar.button("이 달 소득 저장", use_container_width=True):
+    save_monthly_income(selected_month, monthly_income)
+    st.sidebar.success("저장됨")
 
 
 # ── 저축성 지출 분리 ─────────────────────────────────────────────

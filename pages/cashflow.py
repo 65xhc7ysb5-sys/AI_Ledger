@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, date
 
-from database import load_data, get_available_months, get_budgets, get_fixed_expenses
+from database import load_data, get_available_months, get_budgets, get_fixed_expenses, save_monthly_income, get_monthly_income, save_setting
 from core.finance import calculate_fv as _sv_fv, calculate_asset_fv as _as_fv, calculate_max_loan
 from components.formatters import format_korean
 
@@ -65,16 +65,24 @@ st.title("현금흐름 & 자기자본 시뮬레이터")
 # ── Section A: 이번 달 현금흐름 요약 ────────────────────────────
 st.header("Section A — 이번 달 현금흐름")
 
+current_month = datetime.today().strftime("%Y-%m")
+_default_income = _s("income_monthly", 10_800_000)
 monthly_income = st.sidebar.number_input(
     "이번 달 실수령 합산 소득 (원)",
     min_value=0,
-    value=_s("income_monthly", 10_800_000),
-    step=10_000,
+    value=get_monthly_income(current_month, _default_income),
+    step=100_000,
     format="%d",
 )
 st.sidebar.caption(f"= {format_korean(monthly_income)}")
+if st.sidebar.button("이번 달 소득 저장", use_container_width=True):
+    save_monthly_income(current_month, monthly_income)
+    st.sidebar.success("저장됨")
+if st.sidebar.button("기본 소득 변경", use_container_width=True):
+    save_setting("income_monthly", monthly_income)
+    st.sidebar.success("기본값 업데이트됨")
 
-current_month = datetime.today().strftime("%Y-%m")
+
 df = load_data(current_month, None)
 total_expense = int(df["amount"].sum()) if not df.empty else 0
 net_savings   = monthly_income - total_expense
@@ -126,20 +134,19 @@ with tab_prev:
     prev_fixed        = fixed_expense_sum
     prev_savings_type = savings_type_sum
 
-    # 월별 소득 입력 (session_state 기반, DB 저장 없음 — 데이터 누적 방지)
-    prev_income_key = f"income_{prev_month_str}"
-    if prev_income_key not in st.session_state:
-        st.session_state[prev_income_key] = _s("income_monthly", 10_800_000)
+    # 월별 소득 입력 + 저장
+    _default_income = _s("income_monthly", 10_800_000)
     prev_income = st.number_input(
         f"{prev_month_str} 실수령 소득 (원)",
         min_value=0,
-        value=st.session_state[prev_income_key],
+        value=get_monthly_income(prev_month_str, _default_income),
         step=100_000,
         format="%d",
-        key=f"ni_{prev_income_key}",
-        help="육아휴직 등 소득 변동이 있으면 해당 월 실수령액으로 수정하세요.",
+        help="육아휴직 등 소득 변동이 있으면 수정 후 저장하세요.",
     )
-    st.session_state[prev_income_key] = prev_income
+    if st.button(f"{prev_month_str} 소득 저장", key="btn_save_prev_income"):
+        save_monthly_income(prev_month_str, prev_income)
+        st.success("저장됨")
 
     # 공식: 소득 - 변동지출 - 순고정지출 - 저축성지출
     prev_calculated = prev_income - prev_variable - prev_fixed - prev_savings_type

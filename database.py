@@ -225,6 +225,51 @@ def delete_category_safe(category_name):
     finally:
         conn.close()
 
+
+
+
+# --- 월별 소득 관리 ---
+
+def save_monthly_income(year_month: str, amount: int):
+    """월별 실소득 저장. 키: income_YYYY-MM"""
+    save_setting(f"income_{year_month}", amount)
+
+
+def get_monthly_income(year_month: str, default: int) -> int:
+    """월별 실소득 조회. 없으면 income_monthly 기본값 반환."""
+    val = get_setting(f"income_{year_month}")
+    if val:
+        return int(val)
+    return default
+
+
+def cleanup_old_income_settings(keep_months: int = 36):
+    """
+    income_YYYY-MM 키 중 오래된 항목 자동 삭제.
+    현재 월 기준 keep_months개월 이전 데이터 제거.
+    init_db() → run_migrations() 이후 호출.
+    """
+    from datetime import date
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        today = date.today()
+        cutoff_year  = today.year - (keep_months // 12)
+        cutoff_month = today.month - (keep_months % 12)
+        if cutoff_month <= 0:
+            cutoff_month += 12
+            cutoff_year  -= 1
+        cutoff_key = f"income_{cutoff_year}-{cutoff_month:02d}"
+        # income_ 로 시작하는 키 중 cutoff보다 오래된 것 삭제
+        c.execute(
+            "DELETE FROM app_settings WHERE key LIKE 'income_____-__' AND key < ?",
+            (cutoff_key,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # --- 가장 최근에 작성된 지출 내역 ---
 def get_last_entry_date():
     """가장 최근에 작성된 지출 내역의 날짜를 반환합니다."""

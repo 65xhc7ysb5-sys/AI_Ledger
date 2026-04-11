@@ -5,7 +5,7 @@ from PIL import Image
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from database import init_db, insert_expense, load_data, get_budgets, get_categories, get_last_entry_date, get_setting  # DB 호출 함수
+from database import init_db, insert_expense, load_data, get_budgets, get_categories, get_last_entry_date, get_setting, cleanup_old_income_settings
 from config import get_ledger_status_message
 
 # [수정] google.api_core 의존성을 제거하고, tenacity만 사용합니다.
@@ -260,5 +260,5 @@ pg = st.navigation(
 
 # 앱 시작 시 DB 초기화 (pg.run() 전 — 모든 페이지에서 실행)
 init_db()
-
+cleanup_old_income_settings(keep_months=36)
 pg.run()
