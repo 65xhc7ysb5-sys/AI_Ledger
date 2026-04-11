@@ -243,32 +243,40 @@ def get_monthly_income(year_month: str, default: int) -> int:
     return default
 
 
-def cleanup_old_income_settings(keep_months: int = 36):
+def cleanup_old_income_settings():
     """
     income_YYYY-MM 키 중 오래된 항목 자동 삭제.
-    현재 월 기준 keep_months개월 이전 데이터 제거.
-    init_db() → run_migrations() 이후 호출.
+    삭제 기준: 목표 시점(goal_date_year/month) 이후 + 현재보다 24개월 이전.
+    목표 시점이 바뀌어도 자동 반영.
     """
     from datetime import date
     conn = get_connection()
     c = conn.cursor()
     try:
+        # 목표 시점을 app_settings에서 읽음 (없으면 2029-02 fallback)
+        goal_year_row  = c.execute("SELECT value FROM app_settings WHERE key='goal_date_year'").fetchone()
+        goal_month_row = c.execute("SELECT value FROM app_settings WHERE key='goal_date_month'").fetchone()
+        goal_year  = int(goal_year_row[0])  if goal_year_row  else 2029
+        goal_month = int(goal_month_row[0]) if goal_month_row else 2
+
+        # 보존 상한: 목표 시점 (그 이후 데이터는 의미 없음)
+        cutoff_upper = f"income_{goal_year}-{goal_month:02d}"
+
+        # 보존 하한: 현재로부터 24개월 이전 (너무 오래된 데이터 제거)
         today = date.today()
-        cutoff_year  = today.year - (keep_months // 12)
-        cutoff_month = today.month - (keep_months % 12)
-        if cutoff_month <= 0:
-            cutoff_month += 12
-            cutoff_year  -= 1
-        cutoff_key = f"income_{cutoff_year}-{cutoff_month:02d}"
-        # income_ 로 시작하는 키 중 cutoff보다 오래된 것 삭제
+        cutoff_lower_year  = today.year - 2
+        cutoff_lower_month = today.month
+        cutoff_lower = f"income_{cutoff_lower_year}-{cutoff_lower_month:02d}"
+
         c.execute(
-            "DELETE FROM app_settings WHERE key LIKE 'income_____-__' AND key < ?",
-            (cutoff_key,),
+            """DELETE FROM app_settings
+               WHERE key LIKE 'income_____-__'
+               AND (key > ? OR key < ?)""",
+            (cutoff_upper, cutoff_lower),
         )
         conn.commit()
     finally:
         conn.close()
-
 
 # --- 가장 최근에 작성된 지출 내역 ---
 def get_last_entry_date():

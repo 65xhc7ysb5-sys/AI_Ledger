@@ -260,5 +260,5 @@ pg = st.navigation(
 
 # 앱 시작 시 DB 초기화 (pg.run() 전 — 모든 페이지에서 실행)
 init_db()
-cleanup_old_income_settings(keep_months=36)
+cleanup_old_income_settings()
 pg.run()

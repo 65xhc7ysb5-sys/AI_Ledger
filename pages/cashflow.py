@@ -16,10 +16,16 @@ from database import get_setting
 def _s(key, default):
     return type(default)(get_setting(key) or default)
 
+# ── 목표 월 설정 ───────────────────────────────────────────────
+# TARGET_DATE를 페이지 로드마다 재계산하므로 온보딩에서 목표 시점을 바꾸면 즉시 반영됩니다.
 
-# ── 상수 ────────────────────────────────────────────────────────
-TARGET_DATE        = date(TARGET_DATE_YEAR, TARGET_DATE_MONTH, 1)
+def _get_target_date() -> date:
+    """목표 시점을 app_settings에서 동적으로 읽음. 온보딩 미완료 시 config 상수 fallback."""
+    y = _s("goal_date_year",  TARGET_DATE_YEAR)
+    m = _s("goal_date_month", TARGET_DATE_MONTH)
+    return date(y, m, 1)
 
+TARGET_DATE = _get_target_date()
 
 # ── 순수 계산 함수 ───────────────────────────────────────────────
 

@@ -1,7 +1,9 @@
-import streamlit as st
 import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import streamlit as st
 from database import save_setting, get_setting
+from datetime import date
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ── 인라인 format_korean ──────────────────────────────────────
 def format_korean(value: float) -> str:
@@ -19,19 +21,19 @@ def format_korean(value: float) -> str:
 
 # ── 기본값 ───────────────────────────────────────────────────
 ONBOARDING_KEYS = {
-    "profile_name":           "홍길동 가족",
-    "profile_age_main":       "38",
-    "profile_age_spouse":     "35",
-    "profile_children":       "1",
-    "income_monthly":         "10800000",
-    "asset_investment":       "50000000",
-    "asset_subscription":     "25000000",
-    "asset_jeonse_recovery":  "260000000",
-    "goal_equity":            "500000000",
-    "goal_purchase_price":    "825000000",
-    "goal_date_year":         "2029",
-    "goal_date_month":        "2",
-    "goal_retirement_year":   "2048",
+    "profile_name":           "우리 가족",
+    "profile_age_main":       "35",
+    "profile_age_spouse":     "33",
+    "profile_children":       "0",
+    "income_monthly":         "0",
+    "asset_investment":       "0",
+    "asset_subscription":     "0",
+    "asset_jeonse_recovery":  "0",
+    "goal_equity":            "300000000",   # 예시값
+    "goal_purchase_price":    "500000000",   # 예시값
+    "goal_date_year":         "2030",        # 중립 연도
+    "goal_date_month":        "1",
+    "goal_retirement_year":   "2050",        # 중립 연도
     "mortgage_rate":          "0.04",
     "mortgage_years":         "30",
     "profile_completed":      "0",
@@ -39,9 +41,8 @@ ONBOARDING_KEYS = {
 
 # ── 수정 모드 감지 ────────────────────────────────────────────
 def _is_edit_mode() -> bool:
-    completed = get_setting("profile_completed", "0")
-    params = st.query_params
-    return completed == "1" and params.get("edit", "") == "true"
+    """온보딩 완료 상태이면 항상 수정 모드로 진입."""
+    return get_setting("profile_completed", "0") == "1"
 
 # ── Step 1: 가족 구성 ─────────────────────────────────────────
 def _step1():
@@ -180,8 +181,11 @@ def _step3():
             save_setting("goal_date_month",      str(int(goal_month)))
             save_setting("goal_retirement_year", str(int(retire_year)))
             save_setting("mortgage_rate",        str(round(mortgage_rate / 100, 4)))
-            save_setting("mortgage_years",       str(int(mortgage_years)))
+            save_setting("mortgage_years",       str(int(mortgage_years)))            
             save_setting("profile_completed",    "1")
+            save_setting("profile_completed_at", date.today().strftime("%Y-%m"))
+            st.session_state["ob_step"] = "done"
+            st.rerun()
             st.session_state["ob_step"] = "done"
             st.rerun()
 

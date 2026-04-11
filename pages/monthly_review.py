@@ -21,10 +21,11 @@ from config import (
 def _s(key, default):
     return type(default)(get_setting(key) or default)
 
-
 def _months_remaining() -> int:
     today = date.today()
-    target = date(TARGET_DATE_YEAR, TARGET_DATE_MONTH, 1)
+    y = _s("goal_date_year",  TARGET_DATE_YEAR)
+    m = _s("goal_date_month", TARGET_DATE_MONTH)
+    target = date(y, m, 1)
     return max(0, (target.year - today.year) * 12 + (target.month - today.month))
 
 
@@ -160,12 +161,15 @@ col_eq1.metric(
     format_korean(current_equity_est),
     help="투자자산 + 전세보증금 회수 예정액 + 청약저축 (수익률 미적용 현재가)",
 )
+
+_goal_y = _s("goal_date_year",  TARGET_DATE_YEAR),
+_goal_m = _s("goal_date_month", TARGET_DATE_MONTH),
 col_eq2.metric(
     "목표 시점 예상 자기자본",
     format_korean(int(projected_equity)),
     f"{projected_progress:.1f}%",
-    delta_color="normal",
-    help=f"현재 월 저축 목표({saving_target:,}원) 유지 시 {TARGET_DATE_YEAR}년 {TARGET_DATE_MONTH}월 예상치",
+    delta_color="normal",        
+    help=f"현재 월 저축 목표({saving_target:,}원) 유지 시 {_goal_y}년 {_goal_m}월 예상치"
 )
 col_eq3.metric("목표 자기자본", format_korean(goal_equity))
 col_eq4.metric(
@@ -331,8 +335,13 @@ else:
     )
 
 # 자기자본 진행 속도: 목표 시점까지 선형으로 쌓아야 할 기준 달성률과 비교
-# 전체 기간 36개월 기준, 현재 남은 개월 수로 역산
-total_months  = 36  # 2026-03 ~ 2029-02
+_start_str   = get_setting("profile_completed_at") or \
+               f"{_s('goal_date_year', TARGET_DATE_YEAR) - 3}-01"  # fallback: 목표 3년 전
+_sy, _sm     = int(_start_str[:4]), int(_start_str[5:7])
+_gy          = _s("goal_date_year",  TARGET_DATE_YEAR)
+_gm          = _s("goal_date_month", TARGET_DATE_MONTH)
+total_months = max((_gy - _sy) * 12 + (_gm - _sm), 1)
+
 elapsed_share = (total_months - months_rem) / total_months if total_months > 0 else 1
 expected_progress = elapsed_share * 100
 equity_on_track = equity_progress >= expected_progress * 0.9  # 10% 여유 허용
